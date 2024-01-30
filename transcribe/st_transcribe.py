@@ -17,7 +17,7 @@ st.sidebar.subheader("Transcription Options")
 selected_source_lang = st.sidebar.selectbox(
     "Spoken language in recording:", ["en", "jp", "de", "fr", "es", "..."]
 )  # Add languages as needed
-whisper_models = {"fastest": "tiny", "balanced": "small", "most accurate": "large-v2"}
+whisper_models = {"fastest": "tiny", "balanced": "small", "most accurate": "large-v3"}
 whisper_model = st.sidebar.radio("Whisper Model:", list(whisper_models.keys()))
 whisper_model = whisper_models[whisper_model]
 num_speakers = st.sidebar.slider("Number of speakers (set to 0 to auto-detect):", 0, 10, 0)

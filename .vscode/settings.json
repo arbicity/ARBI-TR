@@ -6,7 +6,35 @@
         "titleBar.activeBackground": "#f0e883",
         "titleBar.activeForeground": "#15202b",
         "titleBar.inactiveBackground": "#f0e88399",
-        "titleBar.inactiveForeground": "#15202b99"
+        "titleBar.inactiveForeground": "#15202b99",
+        "tab.activeBorder": "#00ffc8"
     },
-    "peacock.remoteColor": "#c5a7fa"
+    "editor.tokenColorCustomizations": {
+        "textMateRules": [
+            {
+                "scope": "keyword.operator.arithmetic.python",
+                "settings": {
+                    "foreground": "#00d9ff"
+                }
+            },
+            {
+                "scope": "keyword.operator.comparison.python",
+                "settings": {
+                    "foreground": "#0077ff"
+                }
+            },
+            {
+                "scope": "variable.parameter.function-call.python",
+                // "scope": "meta.function-call.arguments.python",
+                // "scope": "meta.function-call.python",
+                // "scope": "source.python",
+                "settings": {
+                    "foreground": "#7a99f5"
+                }
+            },
+        ]
+    },
+    "[python]": {
+        "editor.defaultFormatter": "ms-python.black-formatter"
+    }
 }
