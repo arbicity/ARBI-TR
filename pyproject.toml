@@ -7,8 +7,23 @@ readme = "README.md"
 
 [tool.poetry.dependencies]
 python = "3.11.4"
+faster-whisper = "^0.10.0"
+nvidia-cublas-cu11 = "^11.11.3.6"
+nvidia-cudnn-cu11 = "^8.9.6.50"
+streamlit = "^1.30.0"
 
+
+[tool.poetry.group.dev.dependencies]
+ipykernel = "^6.29.0"
+pre-commit = "^3.6.0"
+
+[tool.isort]
+profile = "black"
+
+[tool.black]
+line-length = 120
 
 [build-system]
 requires = ["poetry-core"]
 build-backend = "poetry.core.masonry.api"
+
