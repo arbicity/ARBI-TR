@@ -6,7 +6,7 @@ The user can also download videos from Youtube based on the URL and transcribe t
 It is backed by [fast-whisper](https://github.com/SYSTRAN/faster-whisper).
 
 ## Demo
-![Demo](./docs/Screenshot 2024-01-30 204454.png)
+![Demo](docs/Screenshot%202024-01-30%20204454.png)
 
 
 ## Installation
