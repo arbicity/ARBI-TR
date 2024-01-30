@@ -1,6 +1,8 @@
 import os
+
 import streamlit as st
-from transcribe import speech_to_text, get_youtube
+
+from transcribe import get_youtube, speech_to_text
 
 st.title("Transcribe a recording")
 
@@ -18,14 +20,10 @@ selected_source_lang = st.sidebar.selectbox(
 whisper_models = {"fastest": "tiny", "balanced": "small", "most accurate": "large-v2"}
 whisper_model = st.sidebar.radio("Whisper Model:", list(whisper_models.keys()))
 whisper_model = whisper_models[whisper_model]
-num_speakers = st.sidebar.slider(
-    "Number of speakers (set to 0 to auto-detect):", 0, 10, 0
-)
+num_speakers = st.sidebar.slider("Number of speakers (set to 0 to auto-detect):", 0, 10, 0)
 
 # Upload the video
-media_file = st.file_uploader(
-    "Choose an input file", type=["mp4", "mp3", "m4a", "mov", "wmv", "wav"]
-)
+media_file = st.file_uploader("Choose an input file", type=["mp4", "mp3", "m4a", "mov", "wmv", "wav"])
 
 # Add YouTube URL input
 st.subheader("Or, enter a YouTube URL:")
@@ -37,9 +35,7 @@ if download_youtube and youtube_url:
     try:
         st.session_state.media_file_path = get_youtube(youtube_url)
         st.session_state.file_ready_for_transcription = True
-        st.success(
-            f"Successfully downloaded video: {os.path.basename(st.session_state.media_file_path)}"
-        )
+        st.success(f"Successfully downloaded video: {os.path.basename(st.session_state.media_file_path)}")
         st.video(st.session_state.media_file_path)
     except Exception as e:
         st.error(f"Failed to download video: {e}")
