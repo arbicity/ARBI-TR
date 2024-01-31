@@ -33,51 +33,6 @@ def load_model(model_size="large-v3"):
     return model
 
 
-# This code is based on https://github.com/streamlit/demo-self-driving/blob/230245391f2dda0cb464008195a470751c01770b/streamlit_app.py#L48  # noqa: E501
-def download_file(url, download_to: Path, expected_size=None):
-    # Don't download the file twice.
-    # (If possible, verify the download using the file length.)
-    if download_to.exists():
-        if expected_size:
-            if download_to.stat().st_size == expected_size:
-                return
-        else:
-            st.info(f"{url} is already downloaded.")
-            if not st.button("Download again?"):
-                return
-
-    download_to.parent.mkdir(parents=True, exist_ok=True)
-
-    # These are handles to two visual elements to animate.
-    weights_warning, progress_bar = None, None
-    try:
-        weights_warning = st.warning("Downloading %s..." % url)
-        progress_bar = st.progress(0)
-        with open(download_to, "wb") as output_file:
-            with urllib.request.urlopen(url) as response:
-                length = int(response.info()["Content-Length"])
-                counter = 0.0
-                MEGABYTES = 2.0**20.0
-                while True:
-                    data = response.read(8192)
-                    if not data:
-                        break
-                    counter += len(data)
-                    output_file.write(data)
-
-                    # We perform animation by overwriting the elements.
-                    weights_warning.warning(
-                        "Downloading %s... (%6.2f/%6.2f MB)" % (url, counter / MEGABYTES, length / MEGABYTES)
-                    )
-                    progress_bar.progress(min(counter / length, 1.0))
-    # Finally, we remove these visual elements by calling .empty().
-    finally:
-        if weights_warning is not None:
-            weights_warning.empty()
-        if progress_bar is not None:
-            progress_bar.empty()
-
-
 def convert_to_whisper_format(sound_chunk):
     if sound_chunk.frame_rate != 16000:  # 16 kHz
         sound_chunk = sound_chunk.set_frame_rate(16000)
@@ -92,34 +47,36 @@ def convert_to_whisper_format(sound_chunk):
 
 def main():
     st.header("Real Time Speech-to-Text")
+    global model
     model = None
-    model_size = "tiny"
+    # model_size = "tiny"
+    # model_size = "medium"
+    model_size = "large-v3"
+    total_time = st.slider("total_time", 0, 60_000, 30_000)
+    window_time = st.slider("window_time", 0, 60_000, 5_000)
+
     with st.spinner(f"Loading Model {model_size}..."):
         model = load_model(model_size)
 
-    sound_chunk = app_sst()
+    fulltext = st.empty()
 
-    if sound_chunk:
-        sound_chunk = sound_chunk.set_channels(1).set_frame_rate(48000)
+    total_sound_chunk = app_sst(fulltext, total_time, window_time)
 
-        st.audio(sound_chunk.export(format="wav").read(), format="audio/wav")
-        arr = convert_to_whisper_format(sound_chunk)
-        segments, info = model.transcribe(arr, beam_size=5)
-        text = "".join([x.text for x in segments])
-
-        print("text: ", text)
-        st.markdown(f"**Text:** {text}")
-
-        # st.session_state["text"] += text
-        # st.session_state["texts"] += str(st.session_state["text"])
-        # st.markdown(f"**Text:** {st.session_state['texts']}")
+    if total_sound_chunk:
+        st.audio(total_sound_chunk.export(format="wav").read(), format="audio/wav")
 
 
-def app_sst():
+def transcribe(sound_chunk):
+    arr = convert_to_whisper_format(sound_chunk)
+    segments, info = model.transcribe(arr, beam_size=5)
+    return "".join([x.text for x in segments])
+
+
+def app_sst(fulltext, total_time, window_time):
     webrtc_ctx = webrtc_streamer(
         key="speech-to-text",
         mode=WebRtcMode.SENDONLY,
-        audio_receiver_size=1024 * 10,  # TODO: return to default 1024
+        audio_receiver_size=1024 * 100,  # TODO: return to default 1024
         rtc_configuration=None,
         media_stream_constraints={"video": False, "audio": True},
     )
@@ -129,8 +86,10 @@ def app_sst():
     if not webrtc_ctx.state.playing:
         return
 
+    total_sound_chunk = pydub.AudioSegment.empty()
     sound_chunk = pydub.AudioSegment.empty()
-    while True:
+
+    while len(total_sound_chunk) < total_time:
         if webrtc_ctx.audio_receiver:
             try:
                 audio_frames = webrtc_ctx.audio_receiver.get_frames(timeout=1)
@@ -145,12 +104,12 @@ def app_sst():
                     )
                     sound_chunk += sound
 
-                if len(sound_chunk) > 5_000:
-                    print(f"sample_width = {audio_frame.format.bytes}")
-                    print(f"frame_rate = {audio_frame.sample_rate}")
-                    print(f"channels = {len(audio_frame.layout.channels)}")
-                    status_indicator.write("Finished!")
-                    return sound_chunk
+                if len(sound_chunk) > window_time:
+                    total_sound_chunk += sound_chunk
+                    text = transcribe(sound_chunk)
+                    st.session_state["texts"] += "\n" + text
+                    fulltext.write(f"**Text:** {st.session_state['texts']}")
+                    sound_chunk = pydub.AudioSegment.empty()
 
             except queue.Empty:
                 time.sleep(0.1)
@@ -160,6 +119,8 @@ def app_sst():
         else:
             status_indicator.write("AudioReciver is not set. Abort.")
             break
+
+    return total_sound_chunk
 
 
 if __name__ == "__main__":
