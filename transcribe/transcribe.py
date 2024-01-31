@@ -240,7 +240,7 @@ def speech_to_text(media_file_path, selected_source_lang, whisper_model, num_spe
     st.write(system_info_text)
     main_progress_bar.progress(1.0)
 
-    save_path = "output/transcript_result.csv"
+    save_path = "data/output/transcript_result.csv"
     df_results = pd.DataFrame(objects)
     df_results.to_csv(save_path)
     return df_results, system_info, save_path

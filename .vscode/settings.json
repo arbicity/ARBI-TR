@@ -6,8 +6,7 @@
         "titleBar.activeBackground": "#f0e883",
         "titleBar.activeForeground": "#15202b",
         "titleBar.inactiveBackground": "#f0e88399",
-        "titleBar.inactiveForeground": "#15202b99",
-        "tab.activeBorder": "#00ffc8"
+        "titleBar.inactiveForeground": "#15202b99"
     },
     "editor.tokenColorCustomizations": {
         "textMateRules": [
@@ -36,5 +35,6 @@
     },
     "[python]": {
         "editor.defaultFormatter": "ms-python.black-formatter"
-    }
+    },
+    "peacock.remoteColor": "#ba213f"
 }

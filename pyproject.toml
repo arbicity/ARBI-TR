@@ -15,6 +15,11 @@ torch = "^2.2.0"
 yt-dlp = "^2023.12.30"
 gpuinfo = "^1.0.0a7"
 pyannote-audio = "^3.1.1"
+sounddevice = "^0.4.6"
+pydub = "^0.25.1"
+twilio = "^8.12.0"
+streamlit-webrtc = "^0.47.1"
+pyaudio = "^0.2.14"
 
 
 [tool.poetry.group.dev.dependencies]
