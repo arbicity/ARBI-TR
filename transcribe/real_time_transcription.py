@@ -16,19 +16,22 @@ import streamlit as st
 from twilio.rest import Client
 from streamlit_webrtc import WebRtcMode, webrtc_streamer
 from faster_whisper import WhisperModel
+import whisperx
 
 HERE = Path(__file__).parent
 
 logger = logging.getLogger(__name__)
 
-if "texts" not in st.session_state:
-    st.session_state["texts"] = ""
-    st.session_state["text"] = ""
-
 
 @st.cache_resource
-def load_model(model_size="large-v3"):
-    model = WhisperModel(model_size, device="cuda", compute_type="float16")
+def load_model(model_size, model_type):
+    device = "cuda"
+    compute_type = "float16"
+    if model_type == "whisperX":
+        model = whisperx.load_model(model_size, device, compute_type=compute_type)
+    else:
+        model = WhisperModel(model_size, device=device, compute_type=compute_type)
+
     print("MODEL LOADED!")
     return model
 
@@ -48,15 +51,17 @@ def convert_to_whisper_format(sound_chunk):
 def main():
     st.header("Real Time Speech-to-Text")
     global model
+    global model_type
     model = None
-    # model_size = "tiny"
-    # model_size = "medium"
-    model_size = "large-v3"
+
+    model_type = st.selectbox("Model Type", ["whisper", "whisperX"])
+    model_size = st.selectbox("Model Size", ["large-v3", "medium", "tiny"])
+
     total_time = st.slider("total_time", 0, 60_000, 30_000)
     window_time = st.slider("window_time", 0, 60_000, 5_000)
 
-    with st.spinner(f"Loading Model {model_size}..."):
-        model = load_model(model_size)
+    with st.spinner(f"Loading Model {model_type} {model_size}..."):
+        model = load_model(model_size, model_type)
 
     fulltext = st.empty()
 
@@ -68,8 +73,12 @@ def main():
 
 def transcribe(sound_chunk):
     arr = convert_to_whisper_format(sound_chunk)
-    segments, info = model.transcribe(arr, beam_size=5)
-    return "".join([x.text for x in segments])
+    if model_type == "whisperX":
+        segments = model.transcribe(arr, language="en")["segments"]
+        return "".join([x["text"] for x in segments])
+    else:
+        segments, info = model.transcribe(arr, language="en")
+        return "".join([x.text for x in segments])
 
 
 def app_sst(fulltext, total_time, window_time):
@@ -80,7 +89,7 @@ def app_sst(fulltext, total_time, window_time):
         rtc_configuration=None,
         media_stream_constraints={"video": False, "audio": True},
     )
-
+    full_text = ""
     status_indicator = st.empty()
 
     if not webrtc_ctx.state.playing:
@@ -106,9 +115,14 @@ def app_sst(fulltext, total_time, window_time):
 
                 if len(sound_chunk) > window_time:
                     total_sound_chunk += sound_chunk
-                    text = transcribe(sound_chunk)
-                    st.session_state["texts"] += "\n" + text
-                    fulltext.write(f"**Text:** {st.session_state['texts']}")
+                    audio_transcribed = transcribe(sound_chunk)
+
+                    for word in audio_transcribed.split(" "):
+                        full_text += "\n" + word
+                        # TODO: Ascyinc rendering
+                        time.sleep(0.2)
+                        fulltext.write(f"**Text:** {full_text}")
+
                     sound_chunk = pydub.AudioSegment.empty()
 
             except queue.Empty:
