@@ -5,6 +5,7 @@ import subprocess
 import time
 import wave
 
+import concurrent.futures
 import numpy as np
 import pandas as pd
 import psutil
@@ -64,13 +65,37 @@ def get_audio_duration(audio_file):
         duration = frames / float(rate)
     return duration
 
-
 def transcribe_audio(model, audio_file, selected_source_lang):
-    options = dict(language=selected_source_lang, beam_size=5, best_of=5)
-    transcribe_options = dict(task="transcribe", **options)
-    segments_raw, info = model.transcribe(audio_file, **transcribe_options)
-    segments = [dict(start=s.start, end=s.end, text=s.text) for s in segments_raw]
+    def transcribe_segment(start, end):
+        segment_options = dict(language=selected_source_lang, beam_size=5, best_of=5)
+        transcribe_segment_options = dict(task="transcribe", **segment_options)
+        segments_raw, _ = model.transcribe(audio_file, start=start, end=end, **transcribe_segment_options)
+        return [dict(start=s.start, end=s.end, text=s.text) for s in segments_raw]
+
+    # Calculate the total duration of the audio file
+    total_duration = get_audio_duration(audio_file)
+
+    # Define batch size and calculate the duration of each batch
+    batch_size = 10  # or any other optimal number you find suitable
+    batch_duration = total_duration / batch_size
+
+    # Prepare a list to collect transcription segments
+    all_segments = []
+
+    # Create a thread pool for concurrent transcription
+    with concurrent.futures.ThreadPoolExecutor() as executor:
+        # Schedule the transcription tasks and collect futures
+        futures = [executor.submit(transcribe_segment, batch_start, min(batch_start + batch_duration, total_duration))
+                   for batch_start in np.arange(0, total_duration, batch_duration)]
+
+        # Process the results as they complete
+        for future in concurrent.futures.as_completed(futures):
+            all_segments.extend(future.result())
+
+    # Flatten the list of segments
+    segments = [segment for batch in all_segments for segment in batch]
     return segments
+
 
 
 def segment_embedding(segment, audio_file, duration):
@@ -240,7 +265,7 @@ def speech_to_text(media_file_path, selected_source_lang, whisper_model, num_spe
     st.write(system_info_text)
     main_progress_bar.progress(1.0)
 
-    save_path = "data/output/transcript_result.csv"
+    save_path = "output/transcript_result.csv"
     df_results = pd.DataFrame(objects)
     df_results.to_csv(save_path)
     return df_results, system_info, save_path
