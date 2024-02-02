@@ -1,6 +1,8 @@
 import logging
 import logging.handlers
 import queue
+from transformers import pipeline
+import torch
 import threading
 import time
 import urllib.request
@@ -29,8 +31,16 @@ def load_model(model_size, model_type):
     compute_type = "float16"
     if model_type == "whisperX":
         model = whisperx.load_model(model_size, device, compute_type=compute_type)
-    else:
+    elif model_type == "whisper":
         model = WhisperModel(model_size, device=device, compute_type=compute_type)
+    else:
+        model = pipeline(
+            "automatic-speech-recognition",
+            model=f"openai/whisper-{model_size}",
+            torch_dtype=torch.float16,
+            device="cuda:0",
+            model_kwargs={"attn_implementation": "flash_attention_2"},
+        )
 
     print("MODEL LOADED!")
     return model
@@ -54,11 +64,11 @@ def main():
     global model_type
     model = None
 
-    model_type = st.selectbox("Model Type", ["whisper", "whisperX"])
+    model_type = st.selectbox("Model Type", ["whisper", "whisperX", "pipeline"])
     model_size = st.selectbox("Model Size", ["large-v3", "medium", "tiny"])
 
-    total_time = st.slider("total_time", 0, 60_000, 30_000)
-    window_time = st.slider("window_time", 0, 60_000, 5_000)
+    total_time = st.slider("total_time", 0, 60, 30)
+    window_time = st.slider("window_time", 0, 60, 5)
 
     with st.spinner(f"Loading Model {model_type} {model_size}..."):
         model = load_model(model_size, model_type)
@@ -76,16 +86,31 @@ def transcribe(sound_chunk):
     if model_type == "whisperX":
         segments = model.transcribe(arr, language="en")["segments"]
         return "".join([x["text"] for x in segments])
-    else:
+    elif model_type == "whisper":
         segments, info = model.transcribe(arr, language="en")
         return "".join([x.text for x in segments])
+    else:
+        batch_size = 16
+        generate_kwargs = {"task": "transcribe", "language": "en"}
+        ts = True
+        chunk_length_s = 4
+        stride_length_s = (1, 1)
+        outputs = model(
+            arr,
+            chunk_length_s=chunk_length_s,
+            batch_size=batch_size,
+            generate_kwargs=generate_kwargs,
+            return_timestamps=ts,
+            stride_length_s=stride_length_s,
+        )
+        return "".join([x["text"] for x in outputs["chunks"]])
 
 
 def app_sst(fulltext, total_time, window_time):
     webrtc_ctx = webrtc_streamer(
         key="speech-to-text",
         mode=WebRtcMode.SENDONLY,
-        audio_receiver_size=1024 * 100,  # TODO: return to default 1024
+        audio_receiver_size=1024 * 20,  # TODO: return to default 1024
         rtc_configuration=None,
         media_stream_constraints={"video": False, "audio": True},
     )
@@ -98,7 +123,7 @@ def app_sst(fulltext, total_time, window_time):
     total_sound_chunk = pydub.AudioSegment.empty()
     sound_chunk = pydub.AudioSegment.empty()
 
-    while len(total_sound_chunk) < total_time:
+    while len(total_sound_chunk) < 1000 * total_time:
         if webrtc_ctx.audio_receiver:
             try:
                 audio_frames = webrtc_ctx.audio_receiver.get_frames(timeout=1)
@@ -113,14 +138,14 @@ def app_sst(fulltext, total_time, window_time):
                     )
                     sound_chunk += sound
 
-                if len(sound_chunk) > window_time:
+                if len(sound_chunk) > 1000 * window_time:
                     total_sound_chunk += sound_chunk
                     audio_transcribed = transcribe(sound_chunk)
 
                     for word in audio_transcribed.split(" "):
                         full_text += "\n" + word
                         # TODO: Ascyinc rendering
-                        time.sleep(0.2)
+                        time.sleep(0.08)
                         fulltext.write(f"**Text:** {full_text}")
 
                     sound_chunk = pydub.AudioSegment.empty()
