@@ -8,17 +8,15 @@ st.write('Upload an audio file and select your preferences.')
 # Sidebar for settings
 with st.sidebar:
     st.header('Settings')
-    size_of_model = st.selectbox("", ["small", "large"], index=1)
+    size_of_model = st.selectbox("Model Size", ["small", "large"], index=1)
     task = st.selectbox("Task", ["transcribe", "translate"], index=0)  # Default to transcribe
-    
-    # Updated language selection with a dropdown
     languages = ['','english', 'chinese', 'german', 'spanish', 'russian', 'korean', 'french', 'japanese', 'portuguese', 'turkish', 'polish', 'catalan', 'dutch', 'arabic', 'swedish', 'italian', 'indonesian', 'hindi', 'finnish', 'vietnamese', 'hebrew', 'ukrainian', 'greek', 'malay', 'czech', 'romanian', 'danish', 'hungarian', 'tamil', 'norwegian', 'thai', 'urdu', 'croatian', 'bulgarian', 'lithuanian', 'latin', 'maori', 'malayalam', 'welsh', 'slovak', 'telugu', 'persian', 'latvian', 'bengali', 'serbian', 'azerbaijani', 'slovenian', 'kannada', 'estonian', 'macedonian', 'breton', 'basque', 'icelandic', 'armenian', 'nepali', 'mongolian', 'bosnian', 'kazakh', 'albanian', 'swahili', 'galician', 'marathi', 'punjabi', 'sinhala', 'khmer', 'shona', 'yoruba', 'somali', 'afrikaans', 'occitan', 'georgian', 'belarusian', 'tajik', 'sindhi', 'gujarati', 'amharic', 'yiddish', 'lao', 'uzbek', 'faroese', 'haitian creole', 'pashto', 'turkmen', 'nynorsk', 'maltese', 'sanskrit', 'luxembourgish', 'myanmar', 'tibetan', 'tagalog', 'malagasy', 'assamese', 'tatar', 'hawaiian', 'lingala', 'hausa', 'bashkir', 'javanese', 'sundanese', 'cantonese', 'burmese', 'valencian', 'flemish', 'haitian', 'letzeburgesch', 'pushto', 'panjabi', 'moldavian', 'moldovan', 'sinhalese', 'castilian', 'mandarin']
-    source_language = st.selectbox("Source Language (blank for autodetection)", options=languages, index=0)  # Default to autodetect
-    
+    source_language = st.selectbox("Source Language (blank for autodetection)", options=[''] + languages, index=0)  # Assuming languages list is defined above
     speaker_number = st.number_input("Speaker Number (0 for autodetection)", min_value=0, value=0, step=1)
 
+
 # File uploader widget
-uploaded_file = st.file_uploader("Choose an audio file...", type=['wav', 'mp3', 'mp4'])
+uploaded_file = st.file_uploader("Choose an audio file...", type=['wav', 'mp3', 'mp4', 'm4a'])
 
 # API Endpoint - Adjust with your actual FastAPI endpoint URL
 API_ENDPOINT = 'http://localhost:8000/transcribe/'
@@ -37,14 +35,26 @@ if uploaded_file is not None:
         }
         
         # POST request to send the file and settings to the backend API
-        response = requests.post(API_ENDPOINT, files=files, data=data)
+        response = requests.post(API_ENDPOINT, files=files, data=data, stream=True)
         
         # Check if the request was successful
         if response.status_code == 200:
-            # Display the transcription results
-            transcription = response.json()
             st.success('Processing complete!')
-            st.write(transcription)
+
+            # Display instructions for downloading the Word document
+            st.write("Download the transcription document:")
+
+            # Create a download button for the Word document
+            # The response.content is the binary content of the Word document
+            with open("transcription.docx", "wb") as f:
+                f.write(response.content)
+            with open("transcription.docx", "rb") as file:
+                btn = st.download_button(
+                    label="Download Transcription",
+                    data=file,
+                    file_name="transcription.docx",
+                    mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+                )
         else:
             # Display an error message if something went wrong
             st.error('An error occurred while processing the file.')
