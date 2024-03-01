@@ -1,5 +1,5 @@
 from fastapi import FastAPI, File, UploadFile, Form
-from fastapi.responses import FileResponse
+from fastapi.responses import JSONResponse
 import shutil
 import subprocess
 import tempfile
@@ -8,7 +8,6 @@ import os
 import time
 from typing import Tuple, List, Optional
 import numpy as np
-from docx import Document
 import pandas as pd
 import torch
 import torchaudio
@@ -38,7 +37,7 @@ def convert_audio_to_wav(media_file_path: str) -> str:
     with tempfile.NamedTemporaryFile(delete=False, suffix=".wav") as temp_wav_file:
         audio_file_path = temp_wav_file.name
     try:
-        cmd = ['ffmpeg', '-y', '-i', media_file_path, '-ar', '16000', '-ac', '1', '-c:a', 'pcm_s16le', '-c:v', 'hevc_nvenc', '-preset', 'fast', audio_file_path]
+        cmd = ['ffmpeg', '-y', '-i', media_file_path, '-ar', '16000', '-ac', '1', '-c:a', 'pcm_s16le', '-preset', 'ultrafast', '-threads', '16', audio_file_path]
         subprocess.run(cmd, check=True)
         print(f"Converted {media_file_path} to WAV: {audio_file_path}")
     except Exception as e:
@@ -139,7 +138,7 @@ def process_audio(file_path: str, size_of_model: str, task: str, source_language
     waveform, sample_rate = load_audio_file(converted_audio_file_path)
     
     transcription_result = perform_transcription(asr_pipeline, converted_audio_file_path)
-
+    del asr_pipeline
     valid_chunks = [chunk for chunk in transcription_result["chunks"] if chunk["timestamp"][1] is not None]
     segments = [(chunk["timestamp"][0], chunk["timestamp"][1]) for chunk in valid_chunks]
 
@@ -208,10 +207,5 @@ async def transcribe_audio(file: UploadFile = File(...),
         async_result = pool.apply_async(process_audio, (temp_file_path, size_of_model, task, source_language, speaker_number))
         result = async_result.get()  # Wait for the process to complete and get the result
 
-    # Convert the result to a pandas DataFrame for easier manipulation
-    df = pd.DataFrame(result['segments'])
-    # Generate a Word document from the DataFrame
-    doc_path = create_transcript_doc(df)
-    
-    # Return the Word document as a downloadable file
-    return FileResponse(path=doc_path, filename="transcription.docx", media_type='application/vnd.openxmlformats-officedocument.wordprocessingml.document')
+    # Return JSON
+    return JSONResponse(content=result)

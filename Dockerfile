@@ -28,7 +28,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 # Install pyenv
 ENV PYENV_ROOT="/root/.pyenv"
-ENV PATH="$PYENV_ROOT/bin:$PYENV_ROOT/shims:$PATH"
+ENV PATH="$PYENV_ROOT/bin:$PYENV_ROOT/shims:$PATH:/root/.poetry/bin"
+
+
 RUN curl https://pyenv.run | bash
 RUN pyenv install 3.11.4
 RUN pyenv global 3.11.4
@@ -43,8 +45,6 @@ WORKDIR /app
 # Copy the poetry files to the container
 COPY pyproject.toml poetry.lock* /app/
 
-# Disable Poetry's virtual environment as we are using pyenv for version management
-RUN poetry config virtualenvs.create false
 
 # Install Python dependencies
 RUN poetry install --no-interaction --no-ansi
@@ -53,10 +53,10 @@ RUN poetry install --no-interaction --no-ansi
 COPY . /app
 
 # Expose the port the app runs on
-EXPOSE 80
+EXPOSE 8000
 
 # Command to run the application
-CMD ["uvicorn", "whisper-api:app", "--host", "0.0.0.0", "--port", "80"]
+CMD ["poetry", "run", "uvicorn", "whisper-api:app", "--host", "0.0.0.0", "--port", "8000"]
 
 # Switch back to dialog for any ad-hoc use of apt-get
 ENV DEBIAN_FRONTEND=dialog
