@@ -20,7 +20,7 @@ with st.sidebar:
 
 uploaded_file = st.file_uploader("Choose an audio file...", type=['wav', 'mp3', 'mp4', 'm4a'])
 
-API_ENDPOINT = 'http://localhost:8000/transcribe/'
+API_ENDPOINT = 'http://arbi-tr-api-service:8000/transcribe/'
 
 if uploaded_file is not None:
     with st.spinner('Processing...'):

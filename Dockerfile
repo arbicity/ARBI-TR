@@ -41,7 +41,6 @@ ENV PATH="$PATH:/root/.local/bin"
 
 # Set the working directory in the container
 WORKDIR /app
-
 # Copy the poetry files to the container
 COPY pyproject.toml poetry.lock* /app/
 
@@ -56,7 +55,5 @@ COPY . /app
 EXPOSE 8000
 
 # Command to run the application
-CMD ["poetry", "run", "uvicorn", "whisper-api:app", "--host", "0.0.0.0", "--port", "8000"]
+CMD ["poetry", "run", "uvicorn", "whisper-api:app", "--host", "0.0.0.0", "--port", "8000", "--reload"]
 
-# Switch back to dialog for any ad-hoc use of apt-get
-ENV DEBIAN_FRONTEND=dialog
