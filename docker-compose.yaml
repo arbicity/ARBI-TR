@@ -14,7 +14,7 @@ services:
       - NVIDIA_VISIBLE_DEVICES=all # Use all available GPUs
       - HF_HOME=/app/models
     volumes:
-      - /mnt/k8scache/stt/:/app/models
+      - /mnt/k8scache/:/app/models
     runtime: nvidia # Use the NVIDIA runtime for GPU support
   arbi-tr-frontend:
     build:
@@ -24,6 +24,6 @@ services:
     image: arbidev/arbi-tr-frontend:latest
     ports:
       - "8501:8501" # Expose port 8501 on the host and map it to port 8501 in the container
-    environment: {}
-      # If there are any environment variables needed, specify them here
+    environment:
+      - STREAMLIT_SERVER_MAX_UPLOAD_SIZE=1000
     restart: always

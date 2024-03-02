@@ -55,5 +55,5 @@ COPY . /app
 EXPOSE 8000
 
 # Command to run the application
-CMD ["poetry", "run", "uvicorn", "whisper-api:app", "--host", "0.0.0.0", "--port", "8000", "--reload"]
+CMD ["poetry", "run", "uvicorn", "backend/whisper-api:app", "--host", "0.0.0.0", "--port", "8000", "--reload"]
 
