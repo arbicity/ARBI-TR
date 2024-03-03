@@ -4,7 +4,7 @@ ARBI TR provides up to 200x realtime transcription speeds on our ARBI BOX device
 
 ### Key Features:
 - **Self-hosted Solution:** Ability to self-host provides data privacy, control, and cost savings vs cloud-based APIs.
-- **Containerized frontend/backend architecture:** Modular frontend/backend architecture with Docker simplifies deployment and provides scalability.
+- **Containerized frontend/backend architecture:** Modular frontend/backend architecture with Docker simplifies deployment.
 - **FastAPI Server:** Offers a robust GPU-accelerated API backend for scalable deployment.
 - **Streamlit Frontend:** Provides a simple intuitive user experience.
 - **Advanced Transformers:** Utilizes the latest Huggingface Transformers library features, including SDPA and Flash Attention 2, for ultra-fast speech recognition.
