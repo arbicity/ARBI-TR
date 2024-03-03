@@ -1,14 +1,18 @@
-ARBI TR is a self-hosted, production-grade GPU-accelerated audio transcription tool combining Whisper's speech recognition and Pyannote's diarization capabilities with a user-friendly interface through FastAPI backend and Streamlit frontend.
+ARBI TR is a self-hosted, open-source, production-grade audio transcription tool using Whisper speech recognition and Pyannote's diarization capabilities with a user-friendly interface through FastAPI backend and Streamlit frontend.
+
+ARBI TR provides up to 200x realtime transcription speeds on the ARBI BOX device powered by a single NVIDIA RTX 4090 GPU.
 
 ### Key Features:
 - **GPU Acceleration:** Leverages Nvidia GPUs for enhanced performance.
-- **Advanced Transformers:** Utilizes the latest Transformers, including SDPA and Flash Attention 2, for ultra-fast speech recognition.
-- **Whisper Integration:** Incorporates Whisper for state-of-the-art speech recognition.
+- **Advanced Transformers:** Utilizes the latest Huggingface Transformers library features, including SDPA and Flash Attention 2, for ultra-fast speech recognition.
+- **Whisper Integration:** Now uses Whisper v3-large by default for state-of-the-art speech recognition.
 - **Pyannote for Diarization:** Uses Pyannote for accurate speaker diarization.
 - **FastAPI Backend:** Offers a robust API functionality.
 - **Streamlit Frontend:** Provides an intuitive user experience.
 - **Fast and Accurate:** Designed for fast and accurate transcription of both video and audio files.
 - **Self-hosted Solution:** Ensures data privacy and control.
+- **Containerized frontend/backend architecture:** Modular frontend/backend architecture with Docker simplifies deployment and provides scalability.
+- **Kubernetes-ready:**  Docker images can be used as-is in a Kubernetes environment (sample .yaml file provided)
 
 ## License
 
