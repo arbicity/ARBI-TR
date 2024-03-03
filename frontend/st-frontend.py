@@ -1,6 +1,7 @@
 import streamlit as st
 import requests
 import pandas as pd
+import os
 
 # Streamlit UI
 st.title('Audio Transcription Service')
@@ -18,7 +19,7 @@ with st.sidebar:
 
 uploaded_file = st.file_uploader("Choose an audio or video file...", type=['wav', 'mp3', 'mp4', 'm4a'])
 
-API_ENDPOINT = 'http://arbi-tr-api-service:8000/transcribe/'
+API_ENDPOINT = os.getenv('API_ENDPOINT', 'http://arbi-tr-api-service:8000/transcribe/')
 
 if uploaded_file is not None:
     with st.spinner('Processing...'):

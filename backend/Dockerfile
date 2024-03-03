@@ -42,18 +42,16 @@ ENV PATH="$PATH:/root/.local/bin"
 # Set the working directory in the container
 WORKDIR /app
 # Copy the poetry files to the container
-COPY pyproject.toml poetry.lock* /app/
-
+COPY . /app
 
 # Install Python dependencies
 RUN poetry install --no-interaction --no-ansi
 
 # Copy the rest of your application's code to the container
-COPY . /app
 
 # Expose the port the app runs on
 EXPOSE 8000
 
 # Command to run the application
-CMD ["poetry", "run", "uvicorn", "backend/whisper-api:app", "--host", "0.0.0.0", "--port", "8000", "--reload"]
+CMD ["poetry", "run", "uvicorn", "whisper-api:app", "--host", "0.0.0.0", "--port", "8000"]
 
