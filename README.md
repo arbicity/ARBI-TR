@@ -12,12 +12,12 @@ Before you start, ensure you have the following installed:
 - Docker
 - NVIDIA Container Toolkit (for running with Docker)
 - Git (for cloning the repository)
+- NVIDIA CUDA 12.3.1 (older versions might work depending on your setup)
 
 For running without Docker and for development purposes, you will need:
 - pyenv
 - Python 3.11.4
 - Poetry
-- NVIDIA CUDA 12.3.1 (older versions might work depending on your setup)
 
 ## Getting Started with Docker
 
@@ -25,7 +25,7 @@ The easiest way to launch ARBI TR is by using Docker. This method automatically 
 
 1. Clone the repository:
     ```bash
-    git clone https://arbitrationcity/ARBI-TR
+    git clone https://github.com/arbitrationcity/ARBI-TR.git
     ```
 2. Navigate to the cloned directory:
     ```bash
@@ -33,12 +33,10 @@ The easiest way to launch ARBI TR is by using Docker. This method automatically 
     ```
 3. Launch the application using Docker Compose:
     ```bash
-    docker compose up
+    docker-compose up
     ```
 
-This will build and start the containers, starting the frontend at http://localhost:8501 and backend as a FASTAPI endpoint at http://localhost:8000/transcribe/ (http://localhost:8000/docs for more endpoint information) 
-
-
+This will build and start the containers, serving the frontend at http://localhost:8501 and the backend as a FASTAPI endpoint at http://localhost:8000/transcribe/ (visit http://localhost:8000/docs for more endpoint information).
 
 ## Running Without Docker (For Development)
 
@@ -49,7 +47,7 @@ If you wish to contribute to the project or just prefer to run the application w
 1. Install `pyenv` and set up Python 3.11.4:
     ```bash
     pyenv install 3.11.4
-    pyenv local 3.11.4
+    pyenv global 3.11.4
     ```
 2. Install Poetry:
     ```bash
@@ -94,5 +92,4 @@ Contributions to ARBI TR are welcome! Please refer to the `CONTRIBUTING.md` file
 
 ## Acknowledgments
 
-This project utilizes open-source software from the Whisper and Pyannote projects. Special thanks to their contributors and maintainers for making ARBI TR possible.
-
+This project relies on openai/whisper (speech recognition model), speechbrain/spkrec-ecapa-voxceleb (speaker embeddings model), pyannote/pyannote-audio (diarization pipeline), and huggingface/transformers (ultra-fast ASR pipeline), and draws inspiration from vumichien/Whisper_speaker_diarization among other projects. Special thanks to all contributors and maintainers for making ARBI TR possible.
