@@ -17,6 +17,7 @@ For running without Docker and for development purposes, you will need:
 - pyenv
 - Python 3.11.4
 - Poetry
+- NVIDIA CUDA 12.3.1 (older versions might work depending on your setup)
 
 ## Getting Started with Docker
 
@@ -24,22 +25,24 @@ The easiest way to launch ARBI TR is by using Docker. This method automatically 
 
 1. Clone the repository:
     ```bash
-    git clone <repository-url>
+    git clone https://arbitrationcity/ARBI-TR
     ```
 2. Navigate to the cloned directory:
     ```bash
-    cd <repository-name>
+    cd ARBI-TR
     ```
 3. Launch the application using Docker Compose:
     ```bash
-    docker-compose up
+    docker compose up
     ```
 
-This will build and bring up the containers, starting both the frontend and backend services.
+This will build and start the containers, starting the frontend at http://localhost:8501 and backend as a FASTAPI endpoint at http://localhost:8000/transcribe/ (http://localhost:8000/docs for more endpoint information) 
+
+
 
 ## Running Without Docker (For Development)
 
-If you prefer to run the application without Docker or are developing new features, follow these steps:
+If you wish to contribute to the project or just prefer to run the application without Docker, follow these steps:
 
 ### Setting Up the Backend
 
