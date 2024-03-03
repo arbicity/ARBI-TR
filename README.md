@@ -6,10 +6,10 @@ ARBI TR provides up to 200x realtime transcription speeds on our ARBI BOX device
 - **Self-hosted Solution:** Ability to self-host provides data privacy, control, and cost savings vs cloud-based APIs.
 - **Containerized frontend/backend architecture:** Modular frontend/backend architecture with Docker simplifies deployment.
 - **FastAPI Server:** Offers a robust GPU-accelerated API backend for scalable deployment.
-- **Streamlit Frontend:** Provides a simple intuitive user experience.
 - **Advanced Transformers:** Utilizes the latest Huggingface Transformers library features, including SDPA and Flash Attention 2, for ultra-fast speech recognition.
 - **Whisper Integration:** Uses Whisper v3-large by default for state-of-the-art speech recognition.
 - **Speechbrain and Pyannote for Diarization:** Uses Speechbrain voice embedding models with a custom speaker identification and diarization pipeline.
+- **Streamlit Frontend:** Provides a simple intuitive user experience.
 - **Kubernetes-ready:**  Docker images can be used as-is in a Kubernetes production environment
 
 ## License
@@ -46,7 +46,7 @@ The easiest way to launch ARBI TR is by using Docker. This method automatically 
     docker compose up
     ```
 
-This will build and start the containers, serving the frontend at http://localhost:8501 and the backend as a FASTAPI endpoint at http://localhost:8000/transcribe/ (visit http://localhost:8000/docs for more endpoint information).
+This will build and start the containers, serving the frontend at http://localhost:8501 and the backend as a FASTAPI endpoint at http://localhost:8000/transcribe/ (see http://localhost:8000/docs for more endpoint information).
 
 ## Running Without Docker (For Development)
 
