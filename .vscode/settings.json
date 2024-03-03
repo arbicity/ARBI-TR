@@ -1,12 +1,12 @@
 {
     "workbench.colorCustomizations": {
-        "commandCenter.border": "#15202b99",
-        "editorGroup.border": "#f5f0b0",
-        "sash.hoverBorder": "#f5f0b0",
-        "titleBar.activeBackground": "#f0e883",
-        "titleBar.activeForeground": "#15202b",
-        "titleBar.inactiveBackground": "#f0e88399",
-        "titleBar.inactiveForeground": "#15202b99"
+        "commandCenter.border": "#e7e7e799",
+        "editorGroup.border": "#db3354",
+        "sash.hoverBorder": "#db3354",
+        "titleBar.activeBackground": "#ba213f",
+        "titleBar.activeForeground": "#e7e7e7",
+        "titleBar.inactiveBackground": "#ba213f99",
+        "titleBar.inactiveForeground": "#e7e7e799"
     },
     "editor.tokenColorCustomizations": {
         "textMateRules": [
