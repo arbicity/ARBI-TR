@@ -1,18 +1,16 @@
-ARBI TR is a self-hosted, open-source, production-grade audio transcription tool using Whisper speech recognition and Pyannote's diarization capabilities with a user-friendly interface through FastAPI backend and Streamlit frontend.
+ARBI TR is a self-hosted, open-source, production-grade audio transcription tool using Whisper speech recognition and Pyannote's diarization capabilities with a user-friendly self-service interface.
 
-ARBI TR provides up to 200x realtime transcription speeds on the ARBI BOX device powered by a single NVIDIA RTX 4090 GPU.
+ARBI TR provides up to 200x realtime transcription speeds on our ARBI BOX device powered by a single NVIDIA RTX 4090 GPU.
 
 ### Key Features:
-- **GPU Acceleration:** Leverages Nvidia GPUs for enhanced performance.
-- **Advanced Transformers:** Utilizes the latest Huggingface Transformers library features, including SDPA and Flash Attention 2, for ultra-fast speech recognition.
-- **Whisper Integration:** Now uses Whisper v3-large by default for state-of-the-art speech recognition.
-- **Pyannote for Diarization:** Uses Pyannote for accurate speaker diarization.
-- **FastAPI Backend:** Offers a robust API functionality.
-- **Streamlit Frontend:** Provides an intuitive user experience.
-- **Fast and Accurate:** Designed for fast and accurate transcription of both video and audio files.
-- **Self-hosted Solution:** Ensures data privacy and control.
+- **Self-hosted Solution:** Ability to self-host provides data privacy, control, and cost savings vs cloud-based APIs.
 - **Containerized frontend/backend architecture:** Modular frontend/backend architecture with Docker simplifies deployment and provides scalability.
-- **Kubernetes-ready:**  Docker images can be used as-is in a Kubernetes environment (sample .yaml file provided)
+- **FastAPI Server:** Offers a robust GPU-accelerated API backend for scalable deployment.
+- **Streamlit Frontend:** Provides a simple intuitive user experience.
+- **Advanced Transformers:** Utilizes the latest Huggingface Transformers library features, including SDPA and Flash Attention 2, for ultra-fast speech recognition.
+- **Whisper Integration:** Uses Whisper v3-large by default for state-of-the-art speech recognition.
+- **Speechbrain and Pyannote for Diarization:** Uses Speechbrain voice embedding models with a custom speaker identification and diarization pipeline.
+- **Kubernetes-ready:**  Docker images can be used as-is in a Kubernetes production environment
 
 ## License
 
