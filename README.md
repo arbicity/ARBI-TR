@@ -1,6 +1,14 @@
-# ARBI TR
+ARBI TR is a self-hosted, production-grade GPU-accelerated audio transcription tool combining Whisper's speech recognition and Pyannote's diarization capabilities with a user-friendly interface through FastAPI backend and Streamlit frontend.
 
-ARBI TR is a powerful audio transcription tool that leverages the capabilities of Whisper and Pyannote through a FastAPI backend, with a Streamlit frontend for an easy-to-use interface. This tool is designed for fast and accurate transcription of video and audio files, providing a self-hosted solution for your transcription needs.
+### Key Features:
+- **GPU Acceleration:** Leverages Nvidia GPUs for enhanced performance.
+- **Advanced Transformers:** Utilizes the latest Transformers, including SDPA and Flash Attention 2, for ultra-fast speech recognition.
+- **Whisper Integration:** Incorporates Whisper for state-of-the-art speech recognition.
+- **Pyannote for Diarization:** Uses Pyannote for accurate speaker diarization.
+- **FastAPI Backend:** Offers a robust API functionality.
+- **Streamlit Frontend:** Provides an intuitive user experience.
+- **Fast and Accurate:** Designed for fast and accurate transcription of both video and audio files.
+- **Self-hosted Solution:** Ensures data privacy and control.
 
 ## License
 
@@ -12,12 +20,12 @@ Before you start, ensure you have the following installed:
 - Docker
 - NVIDIA Container Toolkit (for running with Docker)
 - Git (for cloning the repository)
-- NVIDIA CUDA 12.3.1 (older versions might work depending on your setup)
 
 For running without Docker and for development purposes, you will need:
 - pyenv
 - Python 3.11.4
 - Poetry
+- NVIDIA CUDA 12.3.1 (other versions might work depending on your setup)
 
 ## Getting Started with Docker
 
@@ -33,7 +41,7 @@ The easiest way to launch ARBI TR is by using Docker. This method automatically 
     ```
 3. Launch the application using Docker Compose:
     ```bash
-    docker-compose up
+    docker compose up
     ```
 
 This will build and start the containers, serving the frontend at http://localhost:8501 and the backend as a FASTAPI endpoint at http://localhost:8000/transcribe/ (visit http://localhost:8000/docs for more endpoint information).
