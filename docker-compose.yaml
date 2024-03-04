@@ -9,7 +9,7 @@ services:
     image: arbidev/arbi-tr:latest # Specify your Docker image and version
     command: [] # Add any startup command or arguments if needed
     ports:
-      - "8000:8000" # Map port 8000 of the host to port 8000 of the container
+      - "8001:8000" # Map port 8001 of the host to port 8000 of the container
     environment:
       - NVIDIA_VISIBLE_DEVICES=all # Use all available GPUs
       - HF_HOME=/app/models
