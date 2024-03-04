@@ -19,7 +19,7 @@ DOCKER_HUB_USERNAME="arbidev"
 
 # Define service names and their Dockerfile locations
 declare -A services=(
-    ["arbi-tr-api-service"]="."
+    ["arbi-tr-api-service"]="./backend"
     ["arbi-tr-frontend"]="./frontend"
 )
 
