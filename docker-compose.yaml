@@ -3,7 +3,7 @@ version: '3.8'
 services:
   arbi-tr-api-service:
     build:
-      context: .
+      context: ./backend
       dockerfile: Dockerfile 
     container_name: arbi-tr-api-container
     image: arbidev/arbi-tr:latest # Specify your Docker image and version
