@@ -4,8 +4,7 @@ FROM nvidia/cuda:12.3.1-runtime-ubuntu22.04
 # Avoid warnings by switching to noninteractive
 ENV DEBIAN_FRONTEND=noninteractive
 
-# Install system dependencies required for pyenv, Poetry, and your application
-# Combine update, install, and cleanup into a single RUN to reduce layers and size
+# Install system dependencies required for your application
 RUN apt-get update && apt-get install -y --no-install-recommends \
     curl \
     ca-certificates \
@@ -27,23 +26,30 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     python3-openssl \
     && rm -rf /var/lib/apt/lists/*
 
-# Install pyenv and Poetry in a single RUN command to utilize cache better and reduce layer size
+# Install pyenv
 ENV PYENV_ROOT="/root/.pyenv"
-ENV PATH="$PYENV_ROOT/bin:$PYENV_ROOT/shims:$PATH:/root/.poetry/bin"
+ENV PATH="$PYENV_ROOT/bin:$PYENV_ROOT/shims:$PATH"
+
 RUN curl https://pyenv.run | bash \
     && pyenv install 3.11.4 \
-    && pyenv global 3.11.4 \
-    && curl -sSL https://install.python-poetry.org | python3 - \
-    && echo 'export PATH="$PATH:/root/.local/bin"' >> ~/.bashrc
+    && pyenv global 3.11.4
+
+# Install Poetry using the new recommended installer
+RUN curl -sSL https://install.python-poetry.org | python3 -
+
+# Explicitly set the PATH to include Poetry
+ENV PATH="/root/.local/bin:$PATH"
+
+# Confirm poetry installation and location
+RUN which poetry
 
 # Set the working directory in the container
 WORKDIR /app
 
 # Copy only the files necessary for poetry install to utilize Docker's cache better
-# This way, changes in other files won't invalidate the cache for this layer
 COPY poetry.lock pyproject.toml /app/
 
-# Install Python dependencies
+# Install Python dependencies using Poetry
 RUN poetry config virtualenvs.create false \
     && poetry install --no-interaction --no-ansi
 
