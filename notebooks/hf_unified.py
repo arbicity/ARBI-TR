@@ -1,13 +1,13 @@
-from fastapi import FastAPI, File, UploadFile, Form, BackgroundTasks, HTTPException
+cat whisper-api.py 
+from fastapi import FastAPI, File, UploadFile, Form
 from fastapi.responses import JSONResponse
-from typing import Tuple, List, Optional, Dict
-from uuid import uuid4
 import shutil
 import subprocess
 import tempfile
 import datetime
 import os
 import time
+from typing import Tuple, List, Optional
 import numpy as np
 import pandas as pd
 import torch
@@ -15,10 +15,10 @@ import torchaudio
 from sklearn.cluster import AgglomerativeClustering
 from transformers import pipeline
 from pyannote.audio.pipelines.speaker_verification import PretrainedSpeakerEmbedding
+import multiprocessing
+from functools import partial
 
 app = FastAPI()
-
-tasks: Dict[str, Dict] = {}  # Keeps track of tasks by session_id
 
 def convert_time(secs: float) -> str:
     if secs is None:
@@ -110,74 +110,103 @@ def generate_embeddings_for_segments(embedding_model, waveform: torch.Tensor, sa
     return embeddings
 
 def cluster_embeddings(embeddings: List[torch.Tensor]) -> np.ndarray:
-    """Clusters embeddings dynamically and returns the labels."""
-    embeddings_array = np.vstack(embeddings)  # Stack embeddings vertically
-    clustering_model = AgglomerativeClustering(n_clusters=None, compute_full_tree=True, distance_threshold=1225)
+    """Clusters embeddings and returns the labels."""
+    embeddings_array = np.vstack(embeddings)  # Directly use embeddings if they're numpy arrays
+    clustering_model = AgglomerativeClustering(n_clusters=None, compute_full_tree=True, distance_threshold=2000)
     clustering_model.fit(embeddings_array)
     print(f"Clustering completed. Labels: {np.unique(clustering_model.labels_)}")
     return clustering_model.labels_
 
-def process_audio(file_path: str, size_of_model: str, task: str, source_language: str, speaker_number: int, session_id: str):
-    try:
-        converted_audio_file_path = convert_audio_to_wav(file_path)
-        model_id = f"openai/whisper-{size_of_model}" + ("-v3" if size_of_model == "large" else "")
-        asr_pipeline = pipeline(
-            "automatic-speech-recognition",
-            model=model_id,
-            torch_dtype=torch.float16,
-            model_kwargs={
-                "device_map": "cuda:0" if torch.cuda.is_available() else "cpu",
-                "attn_implementation": "sdpa"
-            },
-            generate_kwargs={
-                "task": task,
-                "language": source_language if source_language else None
-            }
-        )
+def process_audio(file_path: str, size_of_model: str, task: str, source_language: Optional[str], speaker_number: Optional[int]) -> dict:
+    converted_audio_file_path = convert_audio_to_wav(file_path)
 
-        waveform, sample_rate = load_audio_file(converted_audio_file_path)
-        transcription_result = perform_transcription(asr_pipeline, converted_audio_file_path)
-        valid_chunks = [chunk for chunk in transcription_result["chunks"] if chunk["timestamp"][1] is not None]
-        segments = [(chunk["timestamp"][0], chunk["timestamp"][1]) for chunk in valid_chunks]
+    model_id = f"openai/whisper-{size_of_model}" + ("-v3" if size_of_model == "large" else "")
 
-        embedding_model = PretrainedSpeakerEmbedding("speechbrain/spkrec-ecapa-voxceleb", device="cuda" if torch.cuda.is_available() else "cpu")
-        embeddings = generate_embeddings_for_segments(embedding_model, waveform, sample_rate, segments)
+    asr_pipeline = pipeline(
+        "automatic-speech-recognition",
+        model=model_id,
+        torch_dtype=torch.float16,
+        model_kwargs={
+            "device_map": "cuda:0" if torch.cuda.is_available() else "cpu",
+            "attn_implementation": "sdpa"
+        },
+        generate_kwargs={
+            "task": task,
+            "language": source_language if source_language else None
+        }
+    )
 
-        # Autodetect or specify number of speakers
-        if speaker_number == 0:
-            speaker_labels = cluster_embeddings(embeddings)
-        else:
-            clustering_model = AgglomerativeClustering(n_clusters=speaker_number)
-            speaker_labels = clustering_model.fit_predict(np.vstack(embeddings))
+    waveform, sample_rate = load_audio_file(converted_audio_file_path)
+    
+    transcription_result = perform_transcription(asr_pipeline, converted_audio_file_path)
+    del asr_pipeline
+    valid_chunks = [chunk for chunk in transcription_result["chunks"] if chunk["timestamp"][1] is not None]
+    segments = [(chunk["timestamp"][0], chunk["timestamp"][1]) for chunk in valid_chunks]
 
-        grouped_segments = generate_transcription_output(valid_chunks, speaker_labels)
-        tasks[session_id] = {"status": "completed", "data": grouped_segments}
-        print(f"Task {session_id} completed successfully.")
-        
-        os.remove(file_path)
-        os.remove(converted_audio_file_path)
-        if torch.cuda.is_available():
-            torch.cuda.empty_cache()
-    except Exception as e:
-        print(f"An error occurred in session {session_id}: {str(e)}")
-        tasks[session_id] = {"status": "failed", "error": str(e)}
-        if torch.cuda.is_available():
-            torch.cuda.empty_cache()
+    if speaker_number == 0:
+        embedding_model = PretrainedSpeakerEmbedding("speechbrain/spkrec-ecapa-voxceleb", device="cuda")
+    else:
+        embedding_model = PretrainedSpeakerEmbedding("speechbrain/spkrec-ecapa-voxceleb", device="cuda")
+    
+    embeddings = generate_embeddings_for_segments(embedding_model, waveform, sample_rate, segments)
+    
+    if speaker_number == 0:
+        speaker_labels = cluster_embeddings(embeddings)
+    else:
+        clustering_model = AgglomerativeClustering(n_clusters=speaker_number)
+        speaker_labels = clustering_model.fit_predict(np.vstack(embeddings))
 
+    grouped_segments = generate_transcription_output(valid_chunks, speaker_labels)
+    
+    del embedding_model
+    
+    if torch.cuda.is_available():
+        torch.cuda.empty_cache()
+    
+    os.remove(file_path)
+    os.remove(converted_audio_file_path)
+    
+    return grouped_segments
+
+def create_transcript_doc(df, filename="transcription.docx"):
+    """
+    Create a Word document from a DataFrame.
+    df: DataFrame with columns 'Start', 'End', 'Speaker', and 'Text'.
+    """
+    document = Document()
+    document.add_heading('Transcription', level=0)
+
+    # Add a table to the document
+    table = document.add_table(rows=1, cols=4)
+    hdr_cells = table.rows[0].cells
+    hdr_cells[0].text = 'Start'
+    hdr_cells[1].text = 'End'
+    hdr_cells[2].text = 'Speaker'
+    hdr_cells[3].text = 'Text'
+
+    # Populate the table with rows from the DataFrame
+    for _, row in df.iterrows():
+        row_cells = table.add_row().cells
+        row_cells[0].text = str(row['Start'])
+        row_cells[1].text = str(row['End'])
+        row_cells[2].text = str(row['Speaker'])
+        row_cells[3].text = row['Text']
+
+    document.save(filename)
+    return filename
 @app.post("/transcribe/")
-async def transcribe_audio(background_tasks: BackgroundTasks, file: UploadFile = File(...), size_of_model: str = Form(...), task: str = Form(...), source_language: str = Form(None), speaker_number: int = Form(0)):
-    session_id = str(uuid4())
-    tasks[session_id] = {"status": "processing"}
+async def transcribe_audio(file: UploadFile = File(...), 
+                           size_of_model: str = Form(...), 
+                           task: str = Form(...), 
+                           source_language: Optional[str] = Form(None), 
+                           speaker_number: Optional[int] = Form(0)):
     with tempfile.NamedTemporaryFile(delete=False) as temp_file:
         shutil.copyfileobj(file.file, temp_file)
         temp_file_path = temp_file.name
-    background_tasks.add_task(process_audio, temp_file_path, size_of_model, task, source_language, speaker_number, session_id)
-    return {"message": "Processing started, your transcription will be ready soon.", "session_id": session_id}
 
-@app.get("/task_status/{session_id}")
-async def get_task_status(session_id: str):
-    task = tasks.get(session_id)
-    if not task:
-        raise HTTPException(status_code=404, detail="Task not found")
-    return task
+    with multiprocessing.Pool(1) as pool:
+        async_result = pool.apply_async(process_audio, (temp_file_path, size_of_model, task, source_language, speaker_number))
+        result = async_result.get()  # Wait for the process to complete and get the result
 
+    # Return JSON
+    return JSONResponse(content=result)
