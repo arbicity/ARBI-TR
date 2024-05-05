@@ -21,6 +21,7 @@ python-multipart = "^0.0.9"
 pandas = "^2.2.1"
 speechbrain = "~0.5.16"
 torchvision = "^0.18.0"
+grpcio-tools = "^1.63.0"
 
 [build-system]
 requires = ["poetry-core"]
