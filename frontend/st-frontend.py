@@ -5,8 +5,8 @@ import os
 import time
 
 # Streamlit UI setup
-st.title('Audio Transcription Service')
-st.write('Upload audio files and select your preferences.')
+st.title('ARBI Transcription/Translation Service')
+st.write('Select options in the sidebar and then upload audio/video file(s) here.')
 
 def load_languages(file_path):
     with open(file_path, 'r') as file:
@@ -25,12 +25,12 @@ with st.sidebar:
     source_language = st.selectbox("Source Language", options=languages, index=languages.index('*Autodetect'))
     speaker_number = st.selectbox("Number of Speakers", options=speaker_options, index=0)
 
-uploaded_files = st.file_uploader("Choose audio or video files...", type=['wav', 'mp3', 'mp4', 'm4a'], accept_multiple_files=True)
+uploaded_files = st.file_uploader("Select options and upload audio/video file(s)", type=['wav', 'mp3', 'mp4', 'm4a'], accept_multiple_files=True)
 
 API_ENDPOINT = os.getenv('API_ENDPOINT', 'https://arbi-tr-api.arbicity.com')
 
 def process_file(uploaded_file):
-    st.write(f"Uploading {uploaded_file.name}...")
+    st.write(f"Submitting {uploaded_file.name}...")
 
     # Prepare and send the request
     files = {'file': (uploaded_file.name, uploaded_file, 'audio/*')}
@@ -45,12 +45,12 @@ def process_file(uploaded_file):
 
     if response.status_code == 200:
         session_id = response.json().get('session_id')
-        st.success(f'{uploaded_file.name} uploaded successfully. Processing started, session ID: {session_id}')
+        st.success(f'{uploaded_file.name} submitted successfully. Task ID: {session_id}')
 
         # Poll for task status
         return session_id
     else:
-        st.error(f'Error uploading {uploaded_file.name}: {response.status_code} - {response.text}')
+        st.error(f'Error submitting {uploaded_file.name}: {response.status_code} - {response.text}')
         return None
 
 
@@ -75,10 +75,9 @@ def poll_status(session_id, file_name):
             if status == "completed":
                 if 'segments' in status_info:
                     transcription_df = pd.DataFrame(status_info['segments'])
-                    st.write(f"{file_name} - Processing completed successfully.")
                     st.dataframe(transcription_df)
                 else:
-                    st.error(f"No transcription data found for {file_name}. Check backend logs for more details.")
+                    st.error(f"Error: No transcription data found for {file_name}.")
                 break  # Exit the loop since processing is complete
             elif status == "failed":
                 st.error(f'Processing failed for {file_name}: ' + status_info.get('error', 'Unknown error'))
