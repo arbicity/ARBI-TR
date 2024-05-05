@@ -125,17 +125,25 @@ def process_audio(file_path: str, size_of_model: str, task: str, source_language
     )
 
     waveform, sample_rate = load_audio_file(converted_audio_file_path)
-
     transcription_result = perform_transcription(asr_pipeline, converted_audio_file_path)
-    del asr_pipeline
+    del asr_pipeline  # Clean up the ASR model resources
+
     valid_chunks = [chunk for chunk in transcription_result["chunks"] if chunk["timestamp"][1] is not None]
     segments = [(chunk["timestamp"][0], chunk["timestamp"][1]) for chunk in valid_chunks]
 
-    if speaker_number == 0:
-        embedding_model = PretrainedSpeakerEmbedding("speechbrain/spkrec-ecapa-voxceleb", device="cuda")
-    else:
-        embedding_model = PretrainedSpeakerEmbedding("speechbrain/spkrec-ecapa-voxceleb", device="cuda")
+    # Check if there are enough segments for clustering
+    if len(segments) < 2:
+        print("Warning: Only 1 segment found - either a very short file or could not be processed correctly.")
+        # Simulate a grouped segment with only one speaker and one segment
+        if valid_chunks:
+            grouped_segments = generate_transcription_output(valid_chunks, [0] * len(valid_chunks))  # All segments attributed to a single speaker
+        else:
+            grouped_segments = {"segments": []}
+        os.remove(file_path)
+        os.remove(converted_audio_file_path)
+        return grouped_segments
 
+    embedding_model = PretrainedSpeakerEmbedding("speechbrain/spkrec-ecapa-voxceleb", device="cuda")
     embeddings = generate_embeddings_for_segments(embedding_model, waveform, sample_rate, segments)
 
     if speaker_number == 0:
@@ -146,7 +154,7 @@ def process_audio(file_path: str, size_of_model: str, task: str, source_language
 
     grouped_segments = generate_transcription_output(valid_chunks, speaker_labels)
 
-    del embedding_model
+    del embedding_model  # Clean up the embedding model resources
 
     if torch.cuda.is_available():
         torch.cuda.empty_cache()

@@ -1,0 +1,45 @@
+syntax = "proto3";
+
+package audioProcessing;
+
+service AudioProcessingService {
+  rpc ProcessAudio (stream AudioRequest) returns (ProcessResponse);
+  rpc GetResults (ResultsRequest) returns (ResultsResponse);
+}
+
+message AudioRequest {
+  oneof request_data {
+    AudioChunk chunk = 1;
+    AudioSettings settings = 2;
+  }
+}
+
+message AudioSettings {
+  string size_of_model = 1;
+  string task = 2;
+  string source_language = 3;
+  int32 speaker_number = 4;
+}
+
+message AudioChunk {
+  bytes content = 1;
+}
+
+message ProcessResponse {
+  string message = 1;
+}
+
+message ResultsRequest {
+  string sessionId = 1;
+}
+
+message ResultsResponse {
+  repeated Segment segments = 1;
+}
+
+message Segment {
+  string start = 1;
+  string end = 2;
+  string speaker = 3;
+  string text = 4;
+}

@@ -7,7 +7,10 @@ __pycache__/
 *.so
 
 #data files
-
+*.mp3
+#grpc experiments 
+grpc-frontend/
+node-modules/
 
 # Distribution / packaging
 .Python
