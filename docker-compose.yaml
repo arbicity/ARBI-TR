@@ -26,4 +26,5 @@ services:
       - "8501:8501" # Expose port 8501 on the host and map it to port 8501 in the container
     environment:
       - STREAMLIT_SERVER_MAX_UPLOAD_SIZE=1000
+      - API_ENDPOINT=http://arbi-tr-api-container:8000
     restart: always
