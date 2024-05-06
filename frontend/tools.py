@@ -1,7 +1,7 @@
 import os
 import time
 import requests
-from pytube import YouTube
+import yt_dlp
 import pandas as pd
 import tempfile
 import streamlit as st
@@ -14,13 +14,22 @@ def load_languages(file_path):
         languages = file.read().splitlines()
     return languages
 
-# Function to download YouTube videos using pytube
-def download_youtube_video(url):
-    yt = YouTube(url)
-    video = yt.streams.filter(progressive=True, file_extension='mp4').order_by('resolution').desc().last()
-    video_file_path = video.download(output_path=tempfile.gettempdir())
-    return video_file_path
+# Function to download YouTube videos using yt_dlp
 
+def download_youtube_video(url):
+    """ Download YouTube video using yt_dlp with specific options. """
+    ydl_opts = {
+        'format': 'worst',  # Selects the worst available quality
+        'paths': {'home': tempfile.gettempdir()},  # Set download path to temp directory
+        'outtmpl': '%(title)s.%(ext)s',  # Save the file with its title as the name
+    }
+    
+    with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+        result = ydl.extract_info(url, download=True)
+        video_file_path = ydl.prepare_filename(result)  # Get the full path of the downloaded file
+        video_file_name = os.path.basename(video_file_path)  # Get just the file name
+    
+    return video_file_path, video_file_name  # Return both path and file name
 # Process file uploads and returns session ids
 def process_file(file_input, file_name, size_of_model, task_str, source_language, speaker_number):
     data = {
@@ -38,7 +47,7 @@ def handle_response(response, file_name):
     if response.status_code == 200:
         json_response = response.json()
         session_id = json_response.get('session_id')
-        return {'message': f'{file_name} submitted successfully. Task ID: {session_id}', 'session_id': session_id}
+        return {'message': f'Successfully submitted.  Your transcript will appear below shortly. Filename: {file_name} Task ID: {session_id}', 'session_id': session_id}
     else:
         return {'error': f'Error submitting {file_name}: {response.status_code} - {response.text}', 'session_id': None}
 
@@ -57,8 +66,6 @@ def poll_status(session_id, file_name):
 
                 if position is not None:
                     yield f"{file_name} - Current queue position: {position}"
-                else:
-                    yield f"{file_name} - Status: {status}"
 
                 if status == "completed":
                     if 'segments' in status_info:
