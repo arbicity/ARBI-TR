@@ -1,20 +1,11 @@
 import streamlit as st
-import requests
-import pandas as pd
+from tools import load_languages, download_youtube_video, process_file, poll_status
 import os
-import time
+import pandas as pd
 
 # Streamlit UI setup
-st.title('ARBI Transcription/Translation Service')
-st.write('Select options in the sidebar and then upload audio/video file(s) here.')
-
-def load_languages(file_path):
-    with open(file_path, 'r') as file:
-        languages = file.read().splitlines()
-    return languages
-
-# Definition of languages and speaker options
-languages_file_path = 'languages.txt'  # Adjust if your file is in a different location
+st.title('ARBI Transcribe and Translate')
+languages_file_path = 'languages.txt'
 languages = load_languages(languages_file_path)
 speaker_options = ['*Autodetect', '1', '2', '3', '4', '5', '6', '7']
 
@@ -25,68 +16,56 @@ with st.sidebar:
     source_language = st.selectbox("Source Language", options=languages, index=languages.index('*Autodetect'))
     speaker_number = st.selectbox("Number of Speakers", options=speaker_options, index=0)
 
-uploaded_files = st.file_uploader("Select options and upload audio/video file(s)", type=['wav', 'mp3', 'mp4', 'm4a'], accept_multiple_files=True)
+st.write("Step 1.")
+col1, col2 = st.columns([1, 1])
+with col1:
+    uploaded_files = st.file_uploader("Upload audio/video file(s)", type=['wav', 'mp3', 'mp4', 'm4a'], accept_multiple_files=True)
 
-API_ENDPOINT = os.getenv('API_ENDPOINT', 'https://arbi-tr-api.arbicity.com')
-
-def process_file(uploaded_file):
-    st.write(f"Submitting {uploaded_file.name}...")
-
-    # Prepare and send the request
-    files = {'file': (uploaded_file.name, uploaded_file, 'audio/*')}
-    data = {
-        "size_of_model": size_of_model,
-        "task_str": task_str,
-        "source_language": "" if source_language == '*Autodetect' else source_language,
-        "speaker_number": "0" if speaker_number == '*Autodetect' else speaker_number,
-    }
-
-    response = requests.post(f"{API_ENDPOINT}/transcribe/", files=files, data=data)
-
-    if response.status_code == 200:
-        session_id = response.json().get('session_id')
-        st.success(f'{uploaded_file.name} submitted successfully. Task ID: {session_id}')
-
-        # Poll for task status
-        return session_id
-    else:
-        st.error(f'Error submitting {uploaded_file.name}: {response.status_code} - {response.text}')
-        return None
-
-
-def poll_status(session_id, file_name):
-    status = "queued"
-    while status in ["queued", "processing"]:
-        time.sleep(2)  # Poll every 2 seconds to check the status
-        status_response = requests.get(f"{API_ENDPOINT}/task_status/{session_id}")
-
-        if status_response.status_code == 200:
-            status_info = status_response.json()
-            status = status_info.get('status')
-            position = status_info.get('position')
-
-            # Display current queue position if available
-            if position is not None:
-                st.write(f"{file_name} - Current queue position: {position}")
-            else:
-                st.write(f"{file_name} - Status: {status}")
-
-            # Check if the task has completed and handle accordingly
-            if status == "completed":
-                if 'segments' in status_info:
-                    transcription_df = pd.DataFrame(status_info['segments'])
-                    st.dataframe(transcription_df)
-                else:
-                    st.error(f"Error: No transcription data found for {file_name}.")
-                break  # Exit the loop since processing is complete
-            elif status == "failed":
-                st.error(f'Processing failed for {file_name}: ' + status_info.get('error', 'Unknown error'))
-                break  # Exit the loop since processing has failed
-        else:
-            st.error(f'Failed to fetch task status for {file_name}. Please try again later.')
-            break  # Exit the loop on failure to fetch status
-if uploaded_files:
-    session_ids = [process_file(file) for file in uploaded_files]
-    for idx, session_id in enumerate(session_ids):
+with col2:
+    youtube_url = st.text_area("or enter YouTube Video URLs, one per line")
+st.write("Step 2.")
+downloaded_files = []
+if st.button('Generate Transcript'):
+    session_ids = []
+    for file in uploaded_files + downloaded_files:
+        result = process_file(file, file.name, size_of_model, task_str, source_language, '*Autodetect')
+        session_id = result.get('session_id')  # Get the session_id from the result
         if session_id:
-            poll_status(session_id, uploaded_files[idx].name)
+            session_ids.append(session_id)
+        if 'error' in result:
+            st.error(result['error'])
+        else:
+            st.success(result['message'])
+            expander = st.expander(f"Click to view and download the transcript for {file.name}")
+            with expander:
+                for update in poll_status(session_id, file.name):
+                    if isinstance(update, pd.DataFrame):
+                        st.dataframe(update)
+                    else:
+                        st.write(update)
+
+if youtube_url:
+    urls = youtube_url.split('\n')
+    for url in urls:
+        if url.strip():
+            with st.spinner(f'Downloading YouTube video from {url}...'):
+                try:
+                    downloaded_file = download_youtube_video(url)
+                    downloaded_files.append(downloaded_file)
+                    _, file_ext = os.path.splitext(downloaded_file)
+                    if file_ext in ['.mp4', '.m4a']:
+                        st.video(downloaded_file)
+                    else:
+                        st.audio(downloaded_file)
+                except Exception as e:
+                    st.error(f"Failed to download video from {url}. Error: {e}")
+
+if uploaded_files:
+    for file in uploaded_files:
+        display_file = file.getvalue()
+        _, file_ext = os.path.splitext(file.name)
+        if file_ext in ['.mp4', '.m4a']:
+            st.video(display_file)
+        else:
+            st.audio(display_file)
+
