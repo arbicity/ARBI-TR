@@ -1,12 +1,12 @@
-from fastapi import FastAPI, File, UploadFile, Form, HTTPException, BackgroundTasks
+import os
+import json
+from fastapi import FastAPI, File, UploadFile, Form, BackgroundTasks, HTTPException
 from fastapi.responses import JSONResponse
 from typing import Optional, Dict, List
 import uuid
 import shutil
 import tempfile
-import os
-import json
-from utils import process_audio  # Ensure utils.py is adapted for async support if necessary
+from utils import process_audio
 import asyncio
 
 # Initialize the FastAPI app
@@ -14,18 +14,27 @@ app = FastAPI()
 
 # Define global storage for tasks and a queue to manage them
 tasks: Dict[str, Dict] = {}
-tasks_queue: List[str] = []  # Queue to manage tasks by session_id
+tasks_queue: List[str] = []
+
 queue_lock = asyncio.Lock()  # Asyncio lock for thread-safe operations
 
 async def process_audio_file(task_id: str, background_tasks: BackgroundTasks):
     async with queue_lock:
         if task_id not in tasks_queue:
-            return
+            return  # If task is not in the queue, there's nothing to process
         task_details = tasks[task_id]
-    
+
     file_path = task_details["file_path"]
     
+    # Log the path and file details for debugging purposes
+    print(f"Processing file at path: {file_path}, Task ID: {task_id}")
+    if os.path.exists(file_path):
+        print(f"File details - Size: {os.path.getsize(file_path)} bytes, Exists: Yes")
+    else:
+        print("File does not exist, check download or file saving process.")
+    
     try:
+        # Process the audio file using details from the task
         result = process_audio(
             file_path,
             task_details["size_of_model"],
@@ -33,26 +42,36 @@ async def process_audio_file(task_id: str, background_tasks: BackgroundTasks):
             task_details["source_language"],
             task_details["speaker_number"],
         )
-        
-        tasks[task_id].update({"status": "completed", "data": result})
 
-        # Conditional debug output
+        # Update task status to completed and store the result
+        tasks[task_id].update({"status": "completed", "data": result})
+        
+        # Conditional debug output if DEBUG_MODE is set
         if os.getenv('DEBUG_MODE') == '1':
-            print(f"Debug - Task {task_id} completed with result:")
-            print(json.dumps(result, indent=2))
+            debug_info = {
+                "task_id": task_id,
+                "result": result
+            }
+            print("Debug - Task completed with result:")
+            print(json.dumps(debug_info, indent=2))
 
     except Exception as e:
+        # Update task status to failed and log the error
         tasks[task_id].update({"status": "failed", "error": str(e)})
+        print(f"Error processing file {file_path}: {str(e)}")
+
     finally:
+        # Clean up the file after processing
         if os.path.exists(file_path):
             os.remove(file_path)
         
+        # Manage the queue and initiate the next task if any
         async with queue_lock:
             tasks_queue.remove(task_id)
-            
             if tasks_queue:
                 next_task_id = tasks_queue[0]
                 background_tasks.add_task(process_audio_file, next_task_id, background_tasks)
+
 
 @app.post("/transcribe/")
 async def transcribe_audio(background_tasks: BackgroundTasks, file: UploadFile = File(...), size_of_model: str = Form(...), task_str: str = Form(...), source_language: Optional[str] = Form(None), speaker_number: Optional[int] = Form(0)):
@@ -86,14 +105,12 @@ async def get_task_status(session_id: str):
     if not task:
         raise HTTPException(status_code=404, detail="Task not found")
     
-    # Base response includes status and possibly the queue position.
     task_status = {
         "status": task.get("status"),
         "position": tasks_queue.index(session_id) + 1 if session_id in tasks_queue else None
     }
-
-    # If the task is completed, include the transcription results.
+    
     if task['status'] == 'completed' and 'data' in task:
         task_status['segments'] = task['data']['segments']
     
-    return task_status    
+    return task_status

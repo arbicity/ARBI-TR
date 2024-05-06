@@ -10,7 +10,7 @@ __pycache__/
 *.mp3
 #grpc experiments 
 grpc-frontend/
-node-modules/
+node_modules/
 
 # Distribution / packaging
 .Python

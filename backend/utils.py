@@ -1,5 +1,4 @@
 # utils.py
-import shutil
 import subprocess
 import tempfile
 import datetime
@@ -98,13 +97,32 @@ def generate_embeddings_for_segments(embedding_model, waveform: torch.Tensor, sa
         embeddings.append(embedding)
     return embeddings
 
+@timeit
 def cluster_embeddings(embeddings: List[torch.Tensor]) -> np.ndarray:
     embeddings_array = np.vstack(embeddings)
-    clustering_model = AgglomerativeClustering(n_clusters=None, compute_full_tree=True, distance_threshold=2000)
+    embeddings_with_nans = set()  # Keep track of indices of embeddings with NaN values
+
+    # Check for NaN values in the embeddings array
+    if np.isnan(embeddings_array).any():
+        # Impute NaN values using the mean of columns
+        for i in range(embeddings_array.shape[1]):
+            column_mean = np.nanmean(embeddings_array[:, i])
+            nan_indices = np.where(np.isnan(embeddings_array[:, i]))[0]
+            embeddings_array[nan_indices, i] = column_mean
+            # Add indices of embeddings with NaN values to the set
+            embeddings_with_nans.update(nan_indices)
+
+    # Perform clustering with the cleaned embeddings array
+    clustering_model = AgglomerativeClustering(n_clusters=None, compute_full_tree=True, distance_threshold=1200)
     clustering_model.fit(embeddings_array)
     print(f"Clustering completed. Labels: {np.unique(clustering_model.labels_)}")
+
+    # Output the indices of embeddings with NaN values
+    for idx in embeddings_with_nans:
+        print(f"Warning: Embedding at index {idx} contained NaN values which were replaced by mean imputed values.")
     return clustering_model.labels_
 
+@timeit
 def process_audio(file_path: str, size_of_model: str, task: str, source_language: Optional[str], speaker_number: Optional[int]):
     converted_audio_file_path = convert_audio_to_wav(file_path)
 
@@ -120,7 +138,7 @@ def process_audio(file_path: str, size_of_model: str, task: str, source_language
         },
         generate_kwargs={
             "task": task,
-            "language": source_language if source_language else None
+            "language": source_language
         }
     )
 
