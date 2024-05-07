@@ -1,5 +1,4 @@
-# Start from the NVIDIA CUDA 12.3.1 runtime Ubuntu 22.04 image
-FROM nvidia/cuda:12.3.1-runtime-ubuntu22.04
+FROM nvcr.io/nvidia/pytorch:24.04-py3
 
 # Avoid warnings by switching to noninteractive
 ENV DEBIAN_FRONTEND=noninteractive
