@@ -8,6 +8,21 @@ import streamlit as st
 
 API_ENDPOINT = os.getenv('API_ENDPOINT', 'http://localhost:8000')
 
+USE_MTLS = os.getenv('USE_MTLS', '0') == '1'
+
+def secure_request(method, url, **kwargs):
+    if USE_MTLS:
+        client_cert = '/app/certs/client-cert.pem'
+        client_key = '/app/certs/client-key.pem'
+        ca_cert = '/app/certs/ca-cert.pem'
+        kwargs['cert'] = (client_cert, client_key)
+        kwargs['verify'] = ca_cert
+    if method.lower() == 'get':
+        return requests.get(url, **kwargs)
+    elif method.lower() == 'post':
+        return requests.post(url, **kwargs)
+    raise ValueError("Method not supported")
+
 # Load the supported languages from a file
 def load_languages(file_path):
     with open(file_path, 'r') as file:
@@ -39,34 +54,29 @@ def process_file(file_input, file_name, size_of_model, task_str, source_language
         "speaker_number": "0" if speaker_number == '*Autodetect' else speaker_number,
     }
     files = {'file': (file_name, file_input, 'audio/*')}
-    response = requests.post(f"{API_ENDPOINT}/transcribe/", files=files, data=data)
+    response = secure_request('post', f"{API_ENDPOINT}/transcribe/", files=files, data=data)
     return handle_response(response, file_name)
 
-# Handle API responses
 def handle_response(response, file_name):
     if response.status_code == 200:
         json_response = response.json()
         session_id = json_response.get('session_id')
-        return {'message': f'Successfully submitted.  Your transcript will appear below shortly. Filename: {file_name} Task ID: {session_id}', 'session_id': session_id}
+        return {'message': f'Successfully submitted. Your transcript will appear below shortly. Filename: {file_name} Task ID: {session_id}', 'session_id': session_id}
     else:
         return {'error': f'Error submitting {file_name}: {response.status_code} - {response.text}', 'session_id': None}
-
-import requests
 
 def poll_status(session_id, file_name):
     status = "queued"
     try:
         while status in ["queued", "processing"]:
-            time.sleep(2)  # Poll every 2 seconds
-            status_response = requests.get(f"{API_ENDPOINT}/task_status/{session_id}")
+            time.sleep(2)
+            status_response = secure_request('get', f"{API_ENDPOINT}/task_status/{session_id}")
             if status_response.status_code == 200:
                 status_info = status_response.json()
                 status = status_info.get('status')
                 position = status_info.get('position')
-
                 if position is not None:
                     yield f"{file_name} - Current queue position: {position}"
-
                 if status == "completed":
                     if 'segments' in status_info:
                         transcription_df = pd.DataFrame(status_info['segments'])
@@ -82,4 +92,3 @@ def poll_status(session_id, file_name):
                 break
     except Exception as e:
         yield f'An error occurred while polling status: {str(e)}'
-
