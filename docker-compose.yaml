@@ -1,30 +1,37 @@
-version: '3.8'
-
 services:
   arbi-tr-api-service:
     build:
       context: ./backend
-      dockerfile: Dockerfile 
+      dockerfile: Dockerfile
     container_name: arbi-tr-api-container
-    image: arbidev/arbi-tr:latest # Specify your Docker image and version
-    command: [] # Add any startup command or arguments if needed
+    image: arbidev/arbi-tr:latest
+    command: []
     ports:
-      - "8001:8000" # Map port 8001 of the host to port 8000 of the container
+      - "8001:8000"
     environment:
-      - NVIDIA_VISIBLE_DEVICES=all # Use all available GPUs
+      - NVIDIA_VISIBLE_DEVICES=all
       - HF_HOME=/app/models
     volumes:
       - /mnt/k8scache/:/app/models
-    runtime: nvidia # Use the NVIDIA runtime for GPU support
+    runtime: nvidia
+    networks:
+      - backend
+
   arbi-tr-frontend:
     build:
-      context: ./frontend # Directory containing the frontend Dockerfile
-      dockerfile: Dockerfile 
+      context: ./frontend
+      dockerfile: Dockerfile
     container_name: arbi-tr-frontend-container
     image: arbidev/arbi-tr-frontend:latest
     ports:
-      - "8501:8501" # Expose port 8501 on the host and map it to port 8501 in the container
+      - "8501:8501"
     environment:
       - STREAMLIT_SERVER_MAX_UPLOAD_SIZE=1000
       - API_ENDPOINT=http://arbi-tr-api-container:8000
     restart: always
+    networks:
+      - backend
+
+networks:
+  backend:
+    driver: bridge
