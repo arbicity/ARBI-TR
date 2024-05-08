@@ -12,9 +12,9 @@ USE_MTLS = os.getenv('USE_MTLS', '0') == '1'
 
 def secure_request(method, url, **kwargs):
     if USE_MTLS:
-        client_cert = '/app/certs/client-cert.pem'
-        client_key = '/app/certs/client-key.pem'
-        ca_cert = '/app/certs/ca-cert.pem'
+        client_cert = '/app/certs/signed_client.crt'
+        client_key = '/app/certs/client.key'
+        ca_cert = '/app/certs/ca.crt'
         kwargs['cert'] = (client_cert, client_key)
         kwargs['verify'] = ca_cert
     if method.lower() == 'get':

@@ -5,11 +5,12 @@ services:
     build:
       context: ./cert-gen
       dockerfile: Dockerfile
-    volumes:
-      - certs:/certs
-    restart: unless-stopped
+    container_name: cert-init
     networks:
       - backend
+    ports:
+      - "8080:8080"
+    restart: "no" 
 
   arbi-tr-api-service:
     build:
@@ -26,7 +27,6 @@ services:
       - HF_HOME=/app/models
     volumes:
       - /mnt/k8scache/:/app/models
-      - certs:/app/certs   # Mount the certs volume to /app/certs
     runtime: nvidia
     networks:
       - backend
@@ -44,8 +44,6 @@ services:
       - USE_MTLS=1
       - STREAMLIT_SERVER_MAX_UPLOAD_SIZE=1000
       - API_ENDPOINT=https://arbi-tr-api-container:8000
-    volumes:
-      - certs:/app/certs   # Mount the certs volume to /app/certs
     networks:
       - backend
 

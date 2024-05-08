@@ -1,33 +1,25 @@
-# Use a specific version of Ubuntu to ensure consistent environments
-FROM ubuntu:22.04
+FROM python:3.11-slim
 
-# Set a non-interactive shell environment to prevent issues during package installation
-ENV DEBIAN_FRONTEND=noninteractive
-
-# Install necessary packages
+# Install OpenSSL and required packages
 RUN apt-get update && apt-get install -y \
     openssl \
-    cron \
-    && rm -rf /var/lib/apt/lists/*  # Clean up to keep the image small
+    && rm -rf /var/lib/apt/lists/*
 
-# Create a separate directory for scripts
-WORKDIR /scripts
+# Install pyOpenSSL
+RUN pip install --no-cache-dir cryptography
 
-# Copy the certificate generation script into the container
-COPY generate-certs.sh /scripts/generate-certs.sh
+# Set the working directory in the container
+WORKDIR /app
 
-# Ensure the script is executable
-RUN chmod +x /scripts/generate-certs.sh
+# Copy the server script and the CA creation script into the container
+COPY cert-init.py .
+COPY create_ca.sh .
 
-# Create a cron file to schedule your script to run at midnight every day
-# Ensure there is a newline at the end of this command
-RUN echo "0 0 * * * /scripts/generate-certs.sh >> /var/log/cron.log 2>&1" > /etc/cron.d/cert-cron
+# Make the CA creation script executable and run it to generate the CA key and certificate
+RUN chmod +x create_ca.sh && ./create_ca.sh
 
-# Give execution rights on the cron job
-RUN chmod 0644 /etc/cron.d/cert-cron
+# Expose port 8080 to be accessible from the host
+EXPOSE 8080
 
-# Apply the cron job
-RUN crontab /etc/cron.d/cert-cron
-
-# Run the script immediately when the container starts, then start cron to handle periodic execution
-CMD /scripts/generate-certs.sh && cron -f
+# Command to run the server script
+CMD ["sh", "-c", "python cert-init.py $CERTS_TO_ISSUE"]

@@ -77,12 +77,13 @@ if __name__ == "__main__":
 
     if use_mtls:
         ssl_context = ssl.create_default_context(ssl.Purpose.CLIENT_AUTH)
-        ssl_context.load_cert_chain('/app/certs/server-cert.pem', '/app/certs/server-key.pem')
-        ssl_context.load_verify_locations('/app/certs/ca-cert.pem')
+        ssl_context.load_cert_chain('/app/certs/signed_client.crt', '/app/certs/client.key')
+        ssl_context.load_verify_locations('/app/certs/ca.crt')
         ssl_context.verify_mode = ssl.CERT_REQUIRED
 
-        config = uvicorn.Config(app=app, host=host, port=port, ssl_keyfile='/app/certs/server-key.pem', ssl_certfile='/app/certs/server-cert.pem')
+        config = uvicorn.Config(app=app, host=host, port=port, ssl_keyfile='/app/certs/client.key', ssl_certfile='/app/certs/signed_client.crt')
         server = uvicorn.Server(config)
-        server.run()    
+        server.run()
     else:
-        uvicorn.run(app, host="arbi-tr-api-container", port=8000)
+        # Run without SSL context if mTLS is not enabled
+        uvicorn.run(app, host=host, port=port)
