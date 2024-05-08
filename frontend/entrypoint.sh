@@ -1,13 +1,20 @@
 #!/bin/bash
 
-# Set up certificates
-/app/setup_certs.sh
+# Check if USE_MTLS is set to 1
+if [ "$USE_MTLS" = "1" ]; then
+    # Set up certificates
+    /app/setup_certs.sh
 
-# Check if setup was successful
-if [ $? -eq 0 ]; then
-    echo "Certificate setup successful, starting the frontend..."
-    poetry run streamlit run st-frontend.py --server.address=0.0.0.0 --server.port=8501
+    # Check if setup was successful
+    if [ $? -eq 0 ]; then
+        echo "TLS Certificate setup successful, starting the frontend..."
+        poetry run streamlit run st-frontend.py --server.address=0.0.0.0 --server.port=8501
+    else
+        echo "TLS Certificate setup failed, set USE_MTLS=0 and refer to documentation to set up the server on http"
+        exit 1
+    fi
 else
-    echo "Certificate setup failed, terminating..."
-    exit 1
+    # If USE_MTLS is not set to 1, directly start the frontend
+    echo "TLS encryption not enabled, to enable set USE_MTLS=1 and refer to documentation"
+    poetry run streamlit run st-frontend.py --server.address=0.0.0.0 --server.port=8501
 fi
