@@ -1,0 +1,11 @@
+[theme]
+primaryColor="#00adef"
+backgroundColor="#ffffff"
+secondaryBackgroundColor="#D3D3D3"
+textColor="#202b61"
+[client]
+toolbarMode = "minimal"
+[server]
+maxUploadSize = 999
+[browser]
+gatherUsageStats = false
