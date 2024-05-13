@@ -46,9 +46,13 @@ WORKDIR /app
 # Copy only the files necessary for poetry install to utilize Docker's cache better
 COPY poetry.lock pyproject.toml /app/
 
+ENV POETRY_NO_INTERACTION=1 \
+    POETRY_CACHE_DIR=/tmp/poetry_cache
+
 # Install Python dependencies using Poetry
 RUN poetry config virtualenvs.create false \
-    && poetry install --no-interaction --no-ansi
+    && poetry install --no-ansi --no-root --only main && rm -rf $POETRY_CACHE_DIR
+
 
 # Copy the rest of your application's code to the container
 COPY . /app
