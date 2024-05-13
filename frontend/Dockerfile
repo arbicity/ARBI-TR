@@ -28,7 +28,7 @@ ENV POETRY_NO_INTERACTION=1 \
     POETRY_VIRTUALENVS_IN_PROJECT=1 \
     POETRY_VIRTUALENVS_CREATE=1 \
     POETRY_CACHE_DIR=/tmp/poetry_cache
-RUN poetry install --only main && rm -rf $POETRY_CACHE_DIR
+RUN poetry install --no-root --only main && rm -rf $POETRY_CACHE_DIR
 
 # Expose the application's port
 EXPOSE 8501

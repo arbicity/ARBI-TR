@@ -72,7 +72,7 @@ async def get_task_status(session_id: str):
 
 if __name__ == "__main__":
     use_mtls = os.getenv('USE_MTLS') == '1'
-    host = "arbi-tr-api-container"
+    host = "0.0.0.0"
     port = 8000
 
     if use_mtls:
