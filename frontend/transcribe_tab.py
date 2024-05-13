@@ -51,7 +51,7 @@ def transcribe_tab():
         languages_file_path = 'languages.txt'
         languages = load_languages(languages_file_path)
         speaker_options = ['*Autodetect', '1', '2', '3', '4', '5', '6', '7', '8']
-        size_of_model = st.selectbox("Prioritize", ["speed", "quality"], index=1)
+        size_of_model = st.selectbox("Speech recognition model size (small is faster, large is more accurate)", ["small", "large"], index=1)
         task_str = st.selectbox("Task", ["transcribe", "translate"], index=0)
         source_language = st.selectbox("Source Language", options=languages, index=languages.index('*Autodetect'))
         speaker_number = st.selectbox("Number of Speakers", options=speaker_options, index=0)
