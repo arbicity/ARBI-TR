@@ -1,5 +1,5 @@
 [tool.poetry]
-name = "frontend"
+name = "arbi-tr-frontend"
 version = "0.1.0"
 description = ""
 authors = ["Dmitri Evseev <dmitri.evseev@arbi.city>"]
@@ -13,6 +13,12 @@ requests = "^2.31.0"
 pandas = "^2.2.1"
 yt-dlp = "^2024.4.9"
 
+[tool.poetry.dev-dependencies]
+pylint = "^3.1.1"
+autopep8 = "^2.1.0"
+
+[[tool.poetry.packages]]
+include = "src/*.py"
 
 [build-system]
 requires = ["poetry-core"]
