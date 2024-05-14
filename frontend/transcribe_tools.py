@@ -25,13 +25,10 @@ def secure_request(method, url, **kwargs):
     raise ValueError("Method not supported")
 
 # Load the supported languages from a file
-
-
 def load_languages(file_path):
     with open(file_path, 'r') as file:
         languages = file.read().splitlines()
     return languages
-
 # Function to download YouTube videos using yt_dlp
 
 
