@@ -10,6 +10,7 @@ ARBI TR provides up to 200x realtime transcription speeds on our ARBI BOX device
 - **Whisper Integration:** Uses Whisper v3-large by default for state-of-the-art speech recognition.
 - **Speechbrain and Pyannote for Diarization:** Uses Speechbrain voice embedding models with a custom speaker identification and diarization pipeline.
 - **Streamlit Frontend:** Provides a simple intuitive user experience.
+- **TLS Encryption:** Provides custom solution for TLS encryption between docker containers.
 - **Kubernetes-ready:**  Docker images can be used as-is in a Kubernetes production environment
 
 ## License
