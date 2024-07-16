@@ -1,9 +1,3 @@
-"""
-Module for managing transcription services in a Streamlit application. This module handles
-uploading of audio/video files, downloading media from YouTube, configuring transcription
-settings, and processing the transcription and translation of media files.
-"""
-
 import os
 import pandas as pd
 import streamlit as st
@@ -13,11 +7,14 @@ def transcribe_tab():
     """
     Constructs the UI components and handles file and YouTube video operations for transcription.
     """
+    api_key = st.sidebar.text_input("Enter your API Key:", type="password")
+    
     col1, col2 = st.columns([.2, .8])
     with col1:
         st.image("ARBI_Assistant.png", width=75)
     with col2:
         st.title('Transcribe and Translate')
+
     with st.expander(label="About this tool"):
         with open("about.md", "r", encoding="utf-8") as file:
             st.markdown(file.read())
@@ -26,7 +23,10 @@ def transcribe_tab():
 
     settings = setup_transcription_settings()
     if st.button('Generate Transcript'):
-        process_files_for_transcription(uploaded_files, downloaded_files, settings)
+        if api_key:
+            process_files_for_transcription(uploaded_files, downloaded_files, settings, api_key)
+        else:
+            st.error("API Key is required to process the transcription.")
 
 def setup_file_and_video_download():
     """
@@ -74,11 +74,6 @@ def download_youtube_ui(column):
                         st.error(f"Failed to download video from {url}. Error: {e}")
             # Update session state with new downloads
             st.session_state['downloaded_files'].extend(downloaded_files)
-        else:
-            # Display already downloaded media from session state if no new URL is provided
-            for file_path, _, _ in st.session_state['downloaded_files']:
-                display_media(open(file_path, 'rb'), os.path.splitext(file_path)[1])
-
         return [file for file in st.session_state['downloaded_files'] if file[2] in youtube_url.split('\n')]
 
 def display_media(media, file_ext=None):
@@ -112,7 +107,7 @@ def setup_transcription_settings():
         }
         return settings
 
-def process_files_for_transcription(uploaded_files, downloaded_files, settings):
+def process_files_for_transcription(uploaded_files, downloaded_files, settings, api_key):
     """
     Processes each file for transcription based on the provided settings and displays results.
     """
@@ -131,7 +126,7 @@ def process_files_for_transcription(uploaded_files, downloaded_files, settings):
                 result = process_file(
                     file_content, file_name, settings['size_of_model'],
                     settings['task_str'], settings['source_language'],
-                    settings['speaker_number'])
+                    settings['speaker_number'], api_key)
                 session_id = result.get('session_id')
                 if session_id:
                     session_ids.append(session_id)
@@ -139,18 +134,18 @@ def process_files_for_transcription(uploaded_files, downloaded_files, settings):
                     st.error(result['error'])
                 else:
                     st.success(result['message'])
-                    display_transcript_results(session_id)
+                    display_transcript_results(session_id, api_key)
             except Exception as e:
                 st.error(f"Error processing file {file_name}: {e}")
     return session_ids
 
-def display_transcript_results(session_id):
+def display_transcript_results(session_id, api_key):
     """
     Displays transcript results for a session in an expander.
     """
     expander = st.expander(f"Session {session_id}: Transcript Ready!")
     with expander:
-        for update in poll_status(session_id, f"Session {session_id}"):
+        for update in poll_status(session_id, f"Session {session_id}", api_key):
             if isinstance(update, pd.DataFrame):
                 st.dataframe(update)
             else:

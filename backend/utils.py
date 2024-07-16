@@ -1,9 +1,10 @@
-# utils.py
+import shutil
 import subprocess
 import tempfile
 import datetime
 import os
 import time
+import logging
 import torch
 import torchaudio
 from sklearn.cluster import AgglomerativeClustering
@@ -11,6 +12,9 @@ from transformers import pipeline
 from pyannote.audio.pipelines.speaker_verification import PretrainedSpeakerEmbedding
 import numpy as np
 from typing import Tuple, List, Optional
+
+# Configure logging
+logging.basicConfig(level=logging.DEBUG)
 
 def convert_time(secs: float) -> str:
     if secs is None:
@@ -22,7 +26,8 @@ def timeit(func):
     def wrapper(*args, **kwargs):
         start_time = time.time()
         result = func(*args, **kwargs)
-        print(f"{func.__name__} executed in {time.time() - start_time:.4f} seconds")
+        elapsed_time = time.time() - start_time
+        logging.info(f"{func.__name__} executed in {elapsed_time:.4f} seconds")
         return result
     return wrapper
 
@@ -34,19 +39,32 @@ def convert_audio_to_wav(media_file_path: str) -> str:
         # Command setup, ensure the command ends properly with the file path arguments
         cmd = ['ffmpeg', '-y', '-i', media_file_path, '-ar', '16000', '-ac', '1', '-c:a', 'pcm_s16le', '-preset', 'ultrafast', audio_file_path]
         subprocess.run(cmd, check=True)
-        print(f"Converted {media_file_path} to WAV: {audio_file_path}")
+        logging.info(f"Converted {media_file_path} to WAV: {audio_file_path}")
     except Exception as e:
         os.remove(audio_file_path)
+        logging.error(f"Error converting audio to WAV: {e}")
         raise e
     return audio_file_path
 
 @timeit
 def load_audio_file(file_path: str) -> Tuple[torch.Tensor, int]:
-    return torchaudio.load(file_path)
+    try:
+        waveform, sample_rate = torchaudio.load(file_path)
+        logging.info(f"Loaded audio file: {file_path}, Sample rate: {sample_rate}")
+        return waveform, sample_rate
+    except Exception as e:
+        logging.error(f"Error loading audio file: {e}")
+        raise e
 
 @timeit
 def perform_transcription(asr_pipeline, converted_audio_file_path: str):
-    return asr_pipeline(converted_audio_file_path, chunk_length_s=30, batch_size=48, return_timestamps=True)
+    try:
+        result = asr_pipeline(converted_audio_file_path, chunk_length_s=30, batch_size=48, return_timestamps=True)
+        logging.info("Transcription performed successfully")
+        return result
+    except Exception as e:
+        logging.error(f"Error performing transcription: {e}")
+        raise e
 
 @timeit
 def generate_transcription_output(segments, speaker_labels) -> dict:
@@ -97,87 +115,55 @@ def generate_embeddings_for_segments(embedding_model, waveform: torch.Tensor, sa
         embeddings.append(embedding)
     return embeddings
 
-@timeit
 def cluster_embeddings(embeddings: List[torch.Tensor]) -> np.ndarray:
     embeddings_array = np.vstack(embeddings)
-    embeddings_with_nans = set()  # Keep track of indices of embeddings with NaN values
-
-    # Check for NaN values in the embeddings array
-    if np.isnan(embeddings_array).any():
-        # Impute NaN values using the mean of columns
-        for i in range(embeddings_array.shape[1]):
-            column_mean = np.nanmean(embeddings_array[:, i])
-            nan_indices = np.where(np.isnan(embeddings_array[:, i]))[0]
-            embeddings_array[nan_indices, i] = column_mean
-            # Add indices of embeddings with NaN values to the set
-            embeddings_with_nans.update(nan_indices)
-
-    # Perform clustering with the cleaned embeddings array
-    clustering_model = AgglomerativeClustering(n_clusters=None, compute_full_tree=True, distance_threshold=1200)
+    clustering_model = AgglomerativeClustering(n_clusters=None, compute_full_tree=True, distance_threshold=2000)
     clustering_model.fit(embeddings_array)
-    print(f"Clustering completed. Labels: {np.unique(clustering_model.labels_)}")
-
-    # Output the indices of embeddings with NaN values
-    for idx in embeddings_with_nans:
-        print(f"Warning: Embedding at index {idx} contained NaN values which were replaced by mean imputed values.")
+    logging.info(f"Clustering completed. Labels: {np.unique(clustering_model.labels_)}")
     return clustering_model.labels_
 
-@timeit
-def process_audio(file_path: str, size_of_model: str, task: str, source_language: Optional[str], speaker_number: Optional[int]):
-    converted_audio_file_path = convert_audio_to_wav(file_path)
+def process_audio(file_path: str, size_of_model: str, task: str, source_language: Optional[str], speaker_number: Optional[int]) -> Tuple[float, dict]:
+    try:
+        logging.info("Starting audio processing...")
+        converted_audio_file_path = convert_audio_to_wav(file_path)
 
-    model_id = f"openai/whisper-{size_of_model}" + ("-v3" if size_of_model == "large" else "")
+        logging.info(f"Using model: openai/whisper-{size_of_model}")
+        model_id = f"openai/whisper-{size_of_model}" + ("-v3" if size_of_model == "large" else "")
 
-    asr_pipeline = pipeline(
-        "automatic-speech-recognition",
-        model=model_id,
-        torch_dtype=torch.float16,
-        model_kwargs={
-            "device_map": "cuda:0" if torch.cuda.is_available() else "cpu",
-            "attn_implementation": "sdpa"
-        },
-        generate_kwargs={
-            "task": task,
-            "language": source_language
-        }
-    )
+        asr_pipeline = pipeline(
+            "automatic-speech-recognition",
+            model=model_id,
+            torch_dtype=torch.float16,
+            model_kwargs={"device_map": "cuda:0" if torch.cuda.is_available() else "cpu"},
+            generate_kwargs={"task": task, "language": source_language}
+        )
 
-    waveform, sample_rate = load_audio_file(converted_audio_file_path)
-    transcription_result = perform_transcription(asr_pipeline, converted_audio_file_path)
-    del asr_pipeline  # Clean up the ASR model resources
+        waveform, sample_rate = load_audio_file(converted_audio_file_path)
+        logging.info(f"Loaded audio file: {converted_audio_file_path}, Duration: {waveform.size(1) / sample_rate} seconds")
 
-    valid_chunks = [chunk for chunk in transcription_result["chunks"] if chunk["timestamp"][1] is not None]
-    segments = [(chunk["timestamp"][0], chunk["timestamp"][1]) for chunk in valid_chunks]
+        transcription_result = perform_transcription(asr_pipeline, converted_audio_file_path)
+        os.remove(converted_audio_file_path)  # Cleanup the converted file immediately after use
 
-    # Check if there are enough segments for clustering
-    if len(segments) < 2:
-        print("Warning: Only 1 segment found - either a very short file or could not be processed correctly.")
-        # Simulate a grouped segment with only one speaker and one segment
-        if valid_chunks:
-            grouped_segments = generate_transcription_output(valid_chunks, [0] * len(valid_chunks))  # All segments attributed to a single speaker
-        else:
-            grouped_segments = {"segments": []}
-        os.remove(file_path)
-        os.remove(converted_audio_file_path)
-        return grouped_segments
+        valid_chunks = [chunk for chunk in transcription_result["chunks"] if chunk["timestamp"][1] is not None]
+        segments = [(chunk["timestamp"][0], chunk["timestamp"][1]) for chunk in valid_chunks]
+        audio_length_seconds = waveform.size(1) / sample_rate  # Calculate the duration of the audio in seconds
 
-    embedding_model = PretrainedSpeakerEmbedding("speechbrain/spkrec-ecapa-voxceleb", device="cuda")
-    embeddings = generate_embeddings_for_segments(embedding_model, waveform, sample_rate, segments)
+        if not segments:
+            logging.warning("No valid segments found")
+            os.remove(file_path)  # Ensure to clean up original file
+            return audio_length_seconds, {"segments": []}
 
-    if speaker_number == 0:
-        speaker_labels = cluster_embeddings(embeddings)
-    else:
-        clustering_model = AgglomerativeClustering(n_clusters=speaker_number)
-        speaker_labels = clustering_model.fit_predict(np.vstack(embeddings))
+        embedding_model = PretrainedSpeakerEmbedding("speechbrain/spkrec-ecapa-voxceleb", device="cuda")
+        embeddings = generate_embeddings_for_segments(embedding_model, waveform, sample_rate, segments)
+        del embedding_model  # Clean up resources
 
-    grouped_segments = generate_transcription_output(valid_chunks, speaker_labels)
+        speaker_labels = cluster_embeddings(embeddings) if speaker_number == 0 else np.zeros(len(segments))
+        transcription_output = generate_transcription_output(valid_chunks, speaker_labels)
 
-    del embedding_model  # Clean up the embedding model resources
+        os.remove(file_path)  # Cleanup the original file
+        logging.info("Audio processing completed successfully")
+        return audio_length_seconds, transcription_output
 
-    if torch.cuda.is_available():
-        torch.cuda.empty_cache()
-
-    os.remove(file_path)
-    os.remove(converted_audio_file_path)
-
-    return grouped_segments
+    except Exception as e:
+        logging.error(f"Error in process_audio: {e}", exc_info=True)
+        raise e
