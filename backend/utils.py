@@ -181,3 +181,33 @@ def process_audio(file_path: str, size_of_model: str, task: str, source_language
     os.remove(converted_audio_file_path)
 
     return grouped_segments
+
+@timeit
+def process_audio_without_diarization(file_path: str, size_of_model: str, task: str, source_language: Optional[str]):
+    converted_audio_file_path = convert_audio_to_wav(file_path)
+
+    model_id = f"openai/whisper-{size_of_model}" + ("-v3" if size_of_model == "large" else "")
+
+    asr_pipeline = pipeline(
+        "automatic-speech-recognition",
+        model=model_id,
+        torch_dtype=torch.float16,
+        model_kwargs={
+            "device_map": "cuda:0" if torch.cuda.is_available() else "cpu",
+            "attn_implementation": "sdpa"
+        },
+        generate_kwargs={
+            "task": task,
+            "language": source_language
+        }
+    )
+
+    transcription_result = perform_transcription(asr_pipeline, converted_audio_file_path)
+    del asr_pipeline  # Clean up the ASR model resources
+
+    if torch.cuda.is_available():
+        torch.cuda.empty_cache()
+
+    os.remove(converted_audio_file_path)
+
+    return {"text": transcription_result["text"]}
