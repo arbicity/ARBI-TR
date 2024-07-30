@@ -8,8 +8,9 @@ from typing import Optional, Dict, List
 import uuid
 import shutil
 import tempfile
-from utils import process_audio
+from utils import process_audio, process_audio_without_diarization
 import asyncio
+from pydantic import BaseModel
 
 app = FastAPI()
 
@@ -70,6 +71,76 @@ async def get_task_status(session_id: str):
         task_status['segments'] = task['data']['segments']
     return task_status
 
+# New OpenAI-compatible models and endpoints
+
+class Transcription(BaseModel):
+    text: str
+
+@app.post("/v1/audio/transcriptions", response_model=Transcription)
+async def transcribe_audio_openai(
+    file: UploadFile = File(...),
+    model: str = Form(...),
+    language: Optional[str] = Form(None),
+    prompt: Optional[str] = Form(None),
+    response_format: Optional[str] = Form("json"),
+    temperature: Optional[float] = Form(0.0)
+):
+    with tempfile.NamedTemporaryFile(delete=False, suffix=os.path.splitext(file.filename)[1]) as temp_file:
+        shutil.copyfileobj(file.file, temp_file)
+    temp_file_path = temp_file.name
+    
+    size_mapping = {
+        "whisper-1": "base",
+        "whisper-large-v3": "large",
+    }
+    size_of_model = size_mapping.get(model, "base")
+    
+    try:
+        result = process_audio_without_diarization(
+            temp_file_path, 
+            size_of_model, 
+            "transcribe", 
+            language
+        )
+        return Transcription(text=result['text'])
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+    finally:
+        if os.path.exists(temp_file_path):
+            os.remove(temp_file_path)
+
+@app.post("/v1/audio/translations", response_model=Transcription)
+async def translate_audio_openai(
+    file: UploadFile = File(...),
+    model: str = Form(...),
+    prompt: Optional[str] = Form(None),
+    response_format: Optional[str] = Form("json"),
+    temperature: Optional[float] = Form(0.0)
+):
+    with tempfile.NamedTemporaryFile(delete=False, suffix=os.path.splitext(file.filename)[1]) as temp_file:
+        shutil.copyfileobj(file.file, temp_file)
+    temp_file_path = temp_file.name
+    
+    size_mapping = {
+        "small": "small",
+        "large-v3": "large",
+    }
+    size_of_model = size_mapping.get(model, "base")
+    
+    try:
+        result = process_audio_without_diarization(
+            temp_file_path, 
+            size_of_model, 
+            "translate", 
+            None  # Auto-detect source language
+        )
+        return Transcription(text=result['text'])
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+    finally:
+        if os.path.exists(temp_file_path):
+            os.remove(temp_file_path)
+
 if __name__ == "__main__":
     use_mtls = os.getenv('USE_MTLS') == '1'
     host = "0.0.0.0"
@@ -85,5 +156,4 @@ if __name__ == "__main__":
         server = uvicorn.Server(config)
         server.run()
     else:
-        # Run without SSL context if mTLS is not enabled
         uvicorn.run(app, host=host, port=port)
