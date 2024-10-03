@@ -1,16 +1,24 @@
 # utils.py
 import subprocess
 import tempfile
+from itertools import islice
 import datetime
 import os
 import time
 import torch
 import torchaudio
 from sklearn.cluster import AgglomerativeClustering
+import torch
+from torch.nn.utils.rnn import pad_sequence
+import torch.nn.functional as F
 from transformers import pipeline
 from pyannote.audio.pipelines.speaker_verification import PretrainedSpeakerEmbedding
 import numpy as np
 from typing import Tuple, List, Optional
+import gc
+import logging
+
+# Configure logging at the beginning of your script
 
 def convert_time(secs: float) -> str:
     if secs is None:
@@ -46,7 +54,7 @@ def load_audio_file(file_path: str) -> Tuple[torch.Tensor, int]:
 
 @timeit
 def perform_transcription(asr_pipeline, converted_audio_file_path: str):
-    return asr_pipeline(converted_audio_file_path, chunk_length_s=30, batch_size=48, return_timestamps=True)
+    return asr_pipeline(converted_audio_file_path, chunk_length_s=30, batch_size=24, return_timestamps=True)
 
 @timeit
 def generate_transcription_output(segments, speaker_labels) -> dict:
@@ -82,19 +90,72 @@ def generate_transcription_output(segments, speaker_labels) -> dict:
     return {"segments": output_segments}
 
 @timeit
-def generate_embeddings_for_segments(embedding_model, waveform: torch.Tensor, sample_rate: int, segments: List[Tuple[float, float]]):
+def generate_embeddings_for_segments(
+    embedding_model, 
+    waveform: torch.Tensor, 
+    sample_rate: int, 
+    segments: List[Tuple[float, float]]
+) -> List[np.ndarray]:
+    """
+    Generate speaker embeddings for audio segments with memory conservation using torch.no_grad().
+    
+    Args:
+        embedding_model: The pretrained speaker embedding model.
+        waveform (torch.Tensor): The audio waveform tensor.
+        sample_rate (int): The sampling rate of the audio.
+        segments (List[Tuple[float, float]]): List of (start_time, end_time) tuples.
+    
+    Returns:
+        List[np.ndarray]: List of embedding vectors for each segment.
+    """
     embeddings = []
     audio_length_in_seconds = waveform.shape[1] / sample_rate
+    EMBEDDING_DIM = 192  # Replace with the correct dimension if different
 
-    for start_time, end_time in segments:
-        if end_time is None or end_time > audio_length_in_seconds:
-            end_time = audio_length_in_seconds
+    # Disable gradient calculations to save memory
+    with torch.no_grad():
+        for idx, (start_time, end_time) in enumerate(segments):
+            # Ensure end_time does not exceed the audio length
+            if end_time is None or end_time > audio_length_in_seconds:
+                end_time = audio_length_in_seconds
 
-        start_sample = int(start_time * sample_rate)
-        end_sample = int(end_time * sample_rate)
-        segment_waveform = waveform[:, start_sample:end_sample].unsqueeze(0)
-        embedding = embedding_model(segment_waveform)
-        embeddings.append(embedding)
+            # Optional: Limit maximum segment duration to prevent very long segments
+            MAX_SEGMENT_DURATION = 300  # in seconds (e.g., 5 minutes)
+            end_time = min(end_time, start_time + MAX_SEGMENT_DURATION, audio_length_in_seconds)
+
+            start_sample = int(start_time * sample_rate)
+            end_sample = int(end_time * sample_rate)
+            segment_waveform = waveform[:, start_sample:end_sample].unsqueeze(0).to(embedding_model.device)
+
+            try:
+                # Generate embedding for the segment
+                embedding = embedding_model(segment_waveform)
+                
+                if isinstance(embedding, np.ndarray):
+                    embeddings.append(embedding)
+                else:
+                    # If embedding is a PyTorch tensor, move it to CPU and convert to NumPy
+                    embeddings.append(embedding.cpu().numpy())
+            except Exception as e:
+                logging.error(f"Error generating embedding for segment {idx}: {e}")
+                # Append a zero vector as a placeholder to maintain alignment
+                embeddings.append(np.zeros(EMBEDDING_DIM))
+                continue
+
+            # Clean up memory by deleting variables
+            del segment_waveform, embedding
+
+            # Invoke garbage collection periodically
+            if (idx + 1) % 500 == 0:
+                gc.collect()
+                logging.info(f"Processed {idx + 1} segments and invoked garbage collection.")
+
+            # Clear CUDA cache periodically to free up GPU memory
+            if (idx + 1) % 100 == 0:
+                if torch.cuda.is_available():
+                    torch.cuda.empty_cache()
+                logging.info(f"Processed {idx + 1} segments.")
+
     return embeddings
 
 @timeit
@@ -125,8 +186,9 @@ def cluster_embeddings(embeddings: List[torch.Tensor]) -> np.ndarray:
 @timeit
 def process_audio(file_path: str, size_of_model: str, task: str, source_language: Optional[str], speaker_number: Optional[int]):
     converted_audio_file_path = convert_audio_to_wav(file_path)
+    logging.basicConfig(level=logging.INFO)
 
-    model_id = f"openai/whisper-{size_of_model}" + ("-v3" if size_of_model == "large" else "")
+    model_id = f"openai/whisper-{size_of_model}" + ("-v3-turbo" if size_of_model == "large" else "")
 
     asr_pipeline = pipeline(
         "automatic-speech-recognition",
