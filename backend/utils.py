@@ -5,6 +5,7 @@ import datetime
 import os
 import time
 import torch
+from torch.cuda import memory_reserved, max_memory_reserved
 import torchaudio
 from sklearn.cluster import AgglomerativeClustering
 from transformers import pipeline
@@ -82,21 +83,41 @@ def generate_transcription_output(segments, speaker_labels) -> dict:
     return {"segments": output_segments}
 
 @timeit
-def generate_embeddings_for_segments(embedding_model, waveform: torch.Tensor, sample_rate: int, segments: List[Tuple[float, float]]):
+def generate_embeddings_for_segments(embedding_model, waveform: torch.Tensor, sample_rate: int, segments: List[Tuple[float, float]], initial_batch_size: int = 32):
     embeddings = []
     audio_length_in_seconds = waveform.shape[1] / sample_rate
+    batch_size = initial_batch_size
+    
+    i = 0
+    while i < len(segments):
+        current_batch_size = batch_size
+        try:
+            batch_waveforms = []
+            for j in range(i, min(i + current_batch_size, len(segments))):
+                start_time, end_time = segments[j]
+                if end_time is None or end_time > audio_length_in_seconds:
+                    end_time = audio_length_in_seconds
+                start_sample = int(start_time * sample_rate)
+                end_sample = int(end_time * sample_rate)
+                segment_waveform = waveform[:, start_sample:end_sample].unsqueeze(0)
+                batch_waveforms.append(segment_waveform)
 
-    for start_time, end_time in segments:
-        if end_time is None or end_time > audio_length_in_seconds:
-            end_time = audio_length_in_seconds
+            # Stack waveforms to create a batch
+            batch_waveforms = torch.cat(batch_waveforms).to(embedding_model.device)
+            batch_embeddings = embedding_model(batch_waveforms)
+            embeddings.extend(batch_embeddings)
+            i += current_batch_size
+        
+        except RuntimeError as e:
+            if 'CUDA out of memory' in str(e):
+                torch.cuda.empty_cache()
+                # Reduce the batch size if OOM occurs
+                current_batch_size = max(1, current_batch_size // 2)
+                print(f"Reduced batch size to {current_batch_size} due to CUDA OOM.")
+            else:
+                raise e
 
-        start_sample = int(start_time * sample_rate)
-        end_sample = int(end_time * sample_rate)
-        segment_waveform = waveform[:, start_sample:end_sample].unsqueeze(0)
-        embedding = embedding_model(segment_waveform)
-        embeddings.append(embedding)
     return embeddings
-
 @timeit
 def cluster_embeddings(embeddings: List[torch.Tensor]) -> np.ndarray:
     embeddings_array = np.vstack(embeddings)
