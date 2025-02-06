@@ -1,6 +1,6 @@
 ARBI TR is a self-hosted, open-source, production-grade audio transcription tool using Whisper speech recognition and Pyannote's diarization capabilities with a user-friendly self-service interface.
 
-ARBI TR provides up to 200x realtime transcription speeds on our ARBI BOX device powered by a single NVIDIA RTX 4090 GPU.
+ARBI TR provides up to 400x realtime transcription speeds on our ARBI BOX device powered by a single NVIDIA RTX 4090 GPU.  Than means a 1 hour video can be transcribed in just 9 seconds.
 
 ### Key Features:
 - **Self-hosted Solution:** Ability to self-host provides data privacy, control, and cost savings vs cloud-based APIs.
