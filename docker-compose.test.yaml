@@ -1,0 +1,38 @@
+# Integration test compose — backend only, no TLS, no frontend.
+#
+# Usage:
+#   docker compose -f docker-compose.test.yaml up --build -d
+#   docker compose -f docker-compose.test.yaml down
+#
+# Models must be pre-cached at /mnt/k8scache (HF_HUB_OFFLINE=1).
+# For first-time model download, set HF_TOKEN=hf_xxx before running.
+# GPU is required (runtime: nvidia). CPU-only will be very slow.
+
+services:
+  arbi-tr:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: arbi-tr-test
+    ports:
+      - "8000:8000"
+    environment:
+      - USE_MTLS=0
+      - NVIDIA_VISIBLE_DEVICES=0
+      - HF_HOME=/app/models
+      - HF_HUB_OFFLINE=1
+      - HF_TOKEN=${HF_TOKEN:-}        # optional — only needed for initial download
+      - WHISPER_MODEL_SIZE=${WHISPER_MODEL_SIZE:-large-v3}
+    volumes:
+      - /mnt/k8scache/:/app/models
+    runtime: nvidia
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+      start_period: 120s   # model loading takes time on first run
+
+networks:
+  default:
+    driver: bridge

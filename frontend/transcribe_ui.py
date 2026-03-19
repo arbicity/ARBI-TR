@@ -57,7 +57,7 @@ def download_youtube_ui(column):
     Manages downloads across reruns using Streamlit's session state.
     """
     with column:
-        youtube_url = st.text_area("or enter YouTube Video URLs, one per line")
+        youtube_url = st.text_area("or enter YouTube Video URLs, one per line", key="youtube_url_input")
         if 'downloaded_files' not in st.session_state:
             st.session_state['downloaded_files'] = []
 
