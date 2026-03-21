@@ -179,7 +179,16 @@ def diarize_audio(
     if num_speakers and num_speakers > 0:
         kwargs["num_speakers"] = num_speakers
 
-    output = pipeline(wav_path, **kwargs)
+    # Preload audio as tensor dict — avoids torchcodec/AudioDecoder dependency
+    import soundfile as sf
+    waveform, sample_rate = sf.read(wav_path, dtype="float32")
+    if waveform.ndim == 1:
+        waveform = waveform[np.newaxis, :]
+    else:
+        waveform = waveform.T  # [samples, channels] -> [channels, samples]
+    audio_input = {"waveform": torch.from_numpy(waveform), "sample_rate": sample_rate}
+
+    output = pipeline(audio_input, **kwargs)
     # pyannote 4.x returns DiarizeOutput; use exclusive turns (no overlap) for transcription alignment
     annotation = output.exclusive_speaker_diarization if hasattr(output, "exclusive_speaker_diarization") else output
     segments = [

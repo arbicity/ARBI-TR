@@ -8,7 +8,7 @@ if [ "$USE_MTLS" = "1" ]; then
     # Check if setup was successful
     if [ $? -eq 0 ]; then
         echo "TLS Certificate setup successful, starting the server..."
-        uv run python main.py
+        /app/.venv/bin/python main.py
     else
         echo "TLS Certificate setup failed, use docker-compose.no-tls.yaml if you want to run with http"
         exit 1
@@ -16,5 +16,5 @@ if [ "$USE_MTLS" = "1" ]; then
 else
     # If USE_MTLS is not set to 1, directly start the server
     echo "WARNING: TLS encryption not enabled, set USE_MTLS=1 and follow documentation to enable encryption"
-    uv run python main.py
+    /app/.venv/bin/python main.py
 fi
