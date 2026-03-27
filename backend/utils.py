@@ -3,8 +3,8 @@ ARBI-TR processing utilities.
 
 Pipeline:
   1. FFmpeg converts input to 16 kHz mono WAV
-  2. faster-whisper transcribes (large-v3, CUDA float16)
-  3. pyannote speaker-diarization-community-1 diarizes (pyannote 4.x)
+  2. faster-whisper BatchedInferencePipeline transcribes (large-v3, CUDA float16, batched)
+  3. pyannote speaker-diarization diarizes (runs in parallel with transcription on separate GPU)
   4. Segments merged by max-overlap speaker assignment + consecutive-speaker merging
 """
 
@@ -14,6 +14,7 @@ import os
 import subprocess
 import tempfile
 import time
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import Optional
 
 import numpy as np
@@ -24,23 +25,49 @@ from loguru import logger
 # Configuration
 # ---------------------------------------------------------------------------
 
-WHISPER_MODEL_SIZE: str = os.getenv("WHISPER_MODEL_SIZE", "large-v3")
-WHISPER_BEAM_SIZE: int = int(os.getenv("WHISPER_BEAM_SIZE", "5"))
-PYANNOTE_MODEL: str = os.getenv(
-    "PYANNOTE_MODEL", "pyannote/speaker-diarization-community-1"
-)
+WHISPER_MODEL_SIZE: str = os.getenv("WHISPER_MODEL_SIZE") or "large-v3"
+WHISPER_BEAM_SIZE: int = int(os.getenv("WHISPER_BEAM_SIZE") or "5")
+WHISPER_BATCH_SIZE: int = int(os.getenv("WHISPER_BATCH_SIZE") or "24")
+PYANNOTE_MODEL: str = os.getenv("PYANNOTE_MODEL") or "pyannote/speaker-diarization-community-1"
+PYANNOTE_SEG_BATCH: int = int(os.getenv("PYANNOTE_SEG_BATCH") or "32")
+PYANNOTE_EMB_BATCH: int = int(os.getenv("PYANNOTE_EMB_BATCH") or "32")
+ENABLE_TF32: bool = (os.getenv("ENABLE_TF32") or "1") == "1"
 HF_TOKEN: Optional[str] = os.getenv("HF_TOKEN")
+
+# GPU device assignment — when two GPUs are available, split models across them.
+# Set WHISPER_DEVICE / DIARIZE_DEVICE to override (e.g. "cuda:0", "cuda:1", "cpu").
+WHISPER_DEVICE: str = os.getenv("WHISPER_DEVICE", "")
+DIARIZE_DEVICE: str = os.getenv("DIARIZE_DEVICE", "")
 
 # ---------------------------------------------------------------------------
 # Model singletons — loaded once, reused across requests
 # ---------------------------------------------------------------------------
 
 _whisper_model = None
+_batched_pipeline = None
 _diarization_pipeline = None
 
 
-def _device() -> str:
-    return "cuda" if torch.cuda.is_available() else "cpu"
+def _gpu_count() -> int:
+    return torch.cuda.device_count() if torch.cuda.is_available() else 0
+
+
+def _whisper_device() -> str:
+    if WHISPER_DEVICE:
+        return WHISPER_DEVICE
+    if _gpu_count() >= 1:
+        return "cuda:0"
+    return "cpu"
+
+
+def _diarize_device() -> str:
+    if DIARIZE_DEVICE:
+        return DIARIZE_DEVICE
+    if _gpu_count() >= 2:
+        return "cuda:1"
+    if _gpu_count() == 1:
+        return "cuda:0"
+    return "cpu"
 
 
 def get_whisper_model():
@@ -49,44 +76,77 @@ def get_whisper_model():
     if _whisper_model is None:
         from faster_whisper import WhisperModel
 
-        device = _device()
-        compute_type = "float16" if device == "cuda" else "int8"
+        device = _whisper_device()
+        if device.startswith("cuda"):
+            fw_device = "cuda"
+            device_index = int(device.split(":")[-1]) if ":" in device else 0
+            compute_type = "float16"
+        else:
+            fw_device = "cpu"
+            device_index = 0
+            compute_type = "int8"
         logger.info(
             f"Loading faster-whisper {WHISPER_MODEL_SIZE} on {device} ({compute_type})"
         )
         _whisper_model = WhisperModel(
             WHISPER_MODEL_SIZE,
-            device=device,
+            device=fw_device,
+            device_index=device_index,
             compute_type=compute_type,
         )
         logger.info("faster-whisper model loaded")
     return _whisper_model
 
 
+def get_batched_pipeline():
+    """Return the BatchedInferencePipeline singleton wrapping the whisper model."""
+    global _batched_pipeline
+    if _batched_pipeline is None:
+        from faster_whisper import BatchedInferencePipeline
+
+        model = get_whisper_model()
+        _batched_pipeline = BatchedInferencePipeline(model=model)
+        logger.info(f"BatchedInferencePipeline ready (batch_size={WHISPER_BATCH_SIZE})")
+    return _batched_pipeline
+
+
 def get_diarization_pipeline():
     """Return the pyannote diarization Pipeline singleton, loading it if needed.
 
-    HF_TOKEN is only required for the initial model download. In production
-    models are pre-cached at HF_HOME (/mnt/k8scache) and HF_HUB_OFFLINE=1
-    so no token is needed at runtime.
+    HF_TOKEN is only required for the initial model download. Once models
+    are cached at HF_HOME no token is needed at runtime.
     """
     global _diarization_pipeline
     if _diarization_pipeline is None:
         from pyannote.audio import Pipeline
 
-        logger.info(f"Loading pyannote pipeline: {PYANNOTE_MODEL}")
+        device = _diarize_device()
+        logger.info(f"Loading pyannote pipeline: {PYANNOTE_MODEL} on {device}")
         _diarization_pipeline = Pipeline.from_pretrained(
             PYANNOTE_MODEL,
             token=HF_TOKEN or None,  # None = use cached, token = download
         )
-        _diarization_pipeline.to(torch.device(_device()))
-        logger.info("pyannote diarization pipeline loaded")
+        _diarization_pipeline.to(torch.device(device))
+
+        if hasattr(_diarization_pipeline, "_segmentation"):
+            _diarization_pipeline._segmentation.batch_size = PYANNOTE_SEG_BATCH
+        if hasattr(_diarization_pipeline, "embedding_batch_size"):
+            _diarization_pipeline.embedding_batch_size = PYANNOTE_EMB_BATCH
+
+        if ENABLE_TF32 and device.startswith("cuda"):
+            torch.backends.cuda.matmul.allow_tf32 = True
+            torch.backends.cudnn.allow_tf32 = True
+
+        logger.info(
+            f"pyannote pipeline loaded (seg_batch={PYANNOTE_SEG_BATCH}, "
+            f"emb_batch={PYANNOTE_EMB_BATCH}, tf32={ENABLE_TF32})"
+        )
     return _diarization_pipeline
 
 
 def initialize_models() -> None:
     """Eagerly load all models at startup to avoid first-request latency."""
-    get_whisper_model()
+    get_batched_pipeline()
     get_diarization_pipeline()
 
 
@@ -131,21 +191,20 @@ def transcribe_audio(
     language: Optional[str] = None,
 ) -> list[dict]:
     """
-    Transcribe audio with faster-whisper.
+    Transcribe audio with faster-whisper's BatchedInferencePipeline.
 
     Returns a list of chunk dicts: {"timestamp": (start, end), "text": str}
     """
     t0 = time.perf_counter()
-    model = get_whisper_model()
-    segments_gen, info = model.transcribe(
+    pipeline = get_batched_pipeline()
+    segments_gen, info = pipeline.transcribe(
         wav_path,
         task=task,
         language=language or None,
         beam_size=WHISPER_BEAM_SIZE,
-        vad_filter=True,
-        vad_parameters={"min_silence_duration_ms": 500},
+        batch_size=WHISPER_BATCH_SIZE,
     )
-    # Consume the generator — faster-whisper is lazy
+    # Consume the generator
     chunks = [
         {"timestamp": (seg.start, seg.end), "text": seg.text}
         for seg in segments_gen
@@ -303,14 +362,30 @@ def process_audio(
     source_language: Optional[str],
     num_speakers: Optional[int],
 ) -> dict:
-    """Transcribe + diarize an audio/video file. Returns {segments: [...]}."""
+    """Transcribe + diarize an audio/video file in parallel. Returns {segments: [...]}."""
     wav_path: Optional[str] = None
     try:
         wav_path = convert_audio_to_wav(file_path)
-        chunks = transcribe_audio(wav_path, task=task, language=source_language)
+
+        # Run transcription and diarization in parallel — they use separate GPUs
+        # and are completely independent (both just need the WAV file).
+        t0 = time.perf_counter()
+        with ThreadPoolExecutor(max_workers=2) as executor:
+            future_transcribe = executor.submit(
+                transcribe_audio, wav_path, task, source_language
+            )
+            future_diarize = executor.submit(
+                diarize_audio, wav_path, num_speakers
+            )
+            chunks = future_transcribe.result()
+            diar_segs = future_diarize.result()
+
+        logger.info(
+            f"Parallel transcribe+diarize completed in {time.perf_counter() - t0:.2f}s"
+        )
+
         if not chunks:
             return {"segments": []}
-        diar_segs = diarize_audio(wav_path, num_speakers=num_speakers)
         return merge_transcription_with_diarization(chunks, diar_segs)
     finally:
         if wav_path and os.path.exists(wav_path):

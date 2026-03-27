@@ -13,8 +13,12 @@ dependencies = [
     "cachetools",
 ]
 
-[tool.uv]
-dev-dependencies = [
+[dependency-groups]
+dev = [
     "pylint",
     "autopep8",
+    "pytest",
 ]
+
+[tool.pytest.ini_options]
+pythonpath = ["."]

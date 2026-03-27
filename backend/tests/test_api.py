@@ -14,6 +14,7 @@ from fastapi.testclient import TestClient
 def mock_models():
     with (
         patch("utils.get_whisper_model", return_value=MagicMock()),
+        patch("utils.get_batched_pipeline", return_value=MagicMock()),
         patch("utils.get_diarization_pipeline", return_value=MagicMock()),
         patch("utils.initialize_models", return_value=None),
     ):

@@ -1,0 +1,17 @@
+[project]
+name = "arbi-tr"
+version = "1.0.0"
+description = "Self-hosted, production-grade audio transcription with faster-whisper and pyannote diarization"
+license = {text = "MIT"}
+
+[tool.commitizen]
+name = "cz_conventional_commits"
+version = "1.0.0"
+version_files = [
+    "pyproject.toml:version",
+    "backend/pyproject.toml:version",
+    "frontend/pyproject.toml:version",
+]
+tag_format = "v$version"
+update_changelog_on_bump = true
+changelog_file = "CHANGELOG.md"

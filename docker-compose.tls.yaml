@@ -1,18 +1,35 @@
 services:
+  cert-init:
+    build:
+      context: ./cert-gen
+      dockerfile: Dockerfile
+    container_name: cert-init
+    networks:
+      - backend
+    ports:
+      - "8080:8080"
+    restart: "no"
+
   arbi-tr-api-service:
     build:
       context: ./backend
       dockerfile: Dockerfile
     container_name: arbi-tr-api-container
+    depends_on:
+      - cert-init
     ports:
-      - "8000:8000"
+      - "8001:8000"
     environment:
-      - USE_MTLS=0
+      - USE_MTLS=1
       - NVIDIA_VISIBLE_DEVICES=all
-      - HF_HOME=/app/models
+      - HF_TOKEN=${HF_TOKEN:-}
     volumes:
-      - /mnt/k8scache/:/app/models
+      - ${HF_CACHE:-~/.cache/huggingface}:/app/models
     runtime: nvidia
+    ipc: host
+    ulimits:
+      memlock: -1
+      stack: 67108864
     networks:
       - backend
 
@@ -23,10 +40,12 @@ services:
     container_name: arbi-tr-frontend-container
     ports:
       - "8501:8501"
+    depends_on:
+      - cert-init
     environment:
-      - USE_MTLS=0
+      - USE_MTLS=1
       - STREAMLIT_SERVER_MAX_UPLOAD_SIZE=1000
-      - API_ENDPOINT=http://arbi-tr-api-container:8000
+      - API_ENDPOINT=https://arbi-tr-api-container:8000
     networks:
       - backend
 

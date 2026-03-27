@@ -4,9 +4,8 @@
 #   docker compose -f docker-compose.test.yaml up --build -d
 #   docker compose -f docker-compose.test.yaml down
 #
-# Models must be pre-cached at /mnt/k8scache (HF_HUB_OFFLINE=1).
-# For first-time model download, set HF_TOKEN=hf_xxx before running.
-# GPU is required (runtime: nvidia). CPU-only will be very slow.
+# Set HF_TOKEN in .env or environment for initial model download.
+# Models are cached at HF_CACHE on the host (default: ~/.cache/huggingface).
 
 services:
   arbi-tr:
@@ -19,12 +18,10 @@ services:
     environment:
       - USE_MTLS=0
       - NVIDIA_VISIBLE_DEVICES=0
-      - HF_HOME=/app/models
-      - HF_HUB_OFFLINE=1
-      - HF_TOKEN=${HF_TOKEN:-}        # optional — only needed for initial download
+      - HF_TOKEN=${HF_TOKEN:-}
       - WHISPER_MODEL_SIZE=${WHISPER_MODEL_SIZE:-large-v3}
     volumes:
-      - /mnt/k8scache/:/app/models
+      - ${HF_CACHE:-~/.cache/huggingface}:/app/models
     runtime: nvidia
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/health"]

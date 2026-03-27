@@ -39,7 +39,7 @@ COPY --chown=newuser:newuser pyproject.toml /app/
 # Regenerate lock on build so it stays in sync with pyproject.toml
 RUN uv lock && uv sync --no-dev
 
-# HuggingFace model cache — mount /mnt/k8scache at runtime
+# HuggingFace model cache — bind-mounted from host HF_CACHE at runtime
 ENV HF_HOME=/app/models
 
 # Application code
