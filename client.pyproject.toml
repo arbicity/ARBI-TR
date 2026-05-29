@@ -1,0 +1,31 @@
+# Curated packaging template for the auto-generated ARBI-TR client.
+# scripts/generate-client.sh copies this to client/pyproject.toml, substituting
+# __VERSION__ with the value from CLIENT_VERSION. Do not edit client/pyproject.toml
+# directly — it is regenerated on every client build.
+[project]
+name = "arbi-tr"
+version = "__VERSION__"
+description = "Auto-generated Python client for the ARBI-TR transcription API"
+license = { text = "MIT" }
+authors = [{ name = "arbi-dev", email = "dev@arbi.city" }]
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+    "httpx>=0.23.0,<0.29.0",
+    "attrs>=22.2.0",
+    "python-dateutil>=2.8.0,<3",
+]
+
+[tool.uv.build-backend]
+module-name = "arbi_tr_client"
+module-root = ""
+
+[build-system]
+requires = ["uv_build>=0.11.0,<0.12.0"]
+build-backend = "uv_build"
+
+[tool.ruff]
+line-length = 120
+
+[tool.ruff.lint]
+select = ["F", "I", "UP"]

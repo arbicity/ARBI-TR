@@ -8,7 +8,7 @@ __pycache__/
 
 #data files
 *.mp3
-#grpc experiments 
+#grpc experiments
 grpc-frontend/
 node_modules/
 
@@ -174,3 +174,8 @@ documents/
 *.mp3
 *.wav
 *.csv
+
+# Auto-generated API client (regenerate with scripts/generate-client.sh).
+# The OpenAPI spec (openapi.json) IS tracked — it is the diff baseline.
+/client/
+openapi.json.old

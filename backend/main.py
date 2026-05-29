@@ -1,7 +1,6 @@
 import asyncio
 import os
 import shutil
-import ssl
 import tempfile
 import uuid
 from contextlib import asynccontextmanager
@@ -9,12 +8,9 @@ from typing import Dict, List, Optional
 
 import uvicorn
 from fastapi import BackgroundTasks, FastAPI, File, Form, HTTPException, UploadFile
-from fastapi.responses import JSONResponse
 from loguru import logger
 from pydantic import BaseModel
-
 from utils import initialize_models, process_audio, process_audio_without_diarization
-
 
 # ---------------------------------------------------------------------------
 # App lifecycle — models loaded once at startup
@@ -79,20 +75,47 @@ async def _run_task(task_id: str, background_tasks: BackgroundTasks) -> None:
 # ---------------------------------------------------------------------------
 
 
+class HealthResponse(BaseModel):
+    status: str
+    queue_length: int
+
+
+class Segment(BaseModel):
+    """A diarized, transcribed span. Timestamps are HH:MM:SS strings."""
+
+    Start: str
+    End: str
+    Speaker: str
+    Text: str
+
+
+class TranscribeSubmitResponse(BaseModel):
+    session_id: str
+    message: str
+    queue_position: int
+
+
+class TaskStatusResponse(BaseModel):
+    status: str
+    position: Optional[int] = None
+    segments: Optional[List[Segment]] = None
+    error: Optional[str] = None
+
+
 @app.get("/health")
-async def health() -> dict:
-    return {"status": "ok", "queue_length": len(tasks_queue)}
+async def health() -> HealthResponse:
+    return HealthResponse(status="ok", queue_length=len(tasks_queue))
 
 
 @app.post("/transcribe/")
 async def transcribe_audio_endpoint(
     background_tasks: BackgroundTasks,
     file: UploadFile = File(...),
-    size_of_model: str = Form(...),        # kept for API compatibility, ignored internally
+    size_of_model: str = Form(...),  # kept for API compatibility, ignored internally
     task_str: str = Form(...),
     source_language: Optional[str] = Form(None),
     speaker_number: Optional[int] = Form(0),
-) -> JSONResponse:
+) -> TranscribeSubmitResponse:
     suffix = os.path.splitext(file.filename or "audio")[1] or ".tmp"
     with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as tmp:
         shutil.copyfileobj(file.file, tmp)
@@ -112,30 +135,23 @@ async def transcribe_audio_endpoint(
     if len(tasks_queue) == 1:
         background_tasks.add_task(_run_task, session_id, background_tasks)
 
-    return JSONResponse(
-        content={
-            "session_id": session_id,
-            "message": "Your request is queued for processing",
-            "queue_position": len(tasks_queue),
-        }
+    return TranscribeSubmitResponse(
+        session_id=session_id,
+        message="Your request is queued for processing",
+        queue_position=len(tasks_queue),
     )
 
 
 @app.get("/task_status/{session_id}")
-async def get_task_status(session_id: str) -> dict:
+async def get_task_status(session_id: str) -> TaskStatusResponse:
     task = tasks.get(session_id)
     if not task:
         raise HTTPException(status_code=404, detail="Task not found")
 
-    response: dict = {
-        "status": task["status"],
-        "position": tasks_queue.index(session_id) + 1 if session_id in tasks_queue else None,
-    }
-    if task["status"] == "completed":
-        response["segments"] = task["data"]["segments"]
-    elif task["status"] == "failed":
-        response["error"] = task.get("error")
-    return response
+    position = tasks_queue.index(session_id) + 1 if session_id in tasks_queue else None
+    segments = [Segment(**s) for s in task["data"]["segments"]] if task["status"] == "completed" else None
+    error = task.get("error") if task["status"] == "failed" else None
+    return TaskStatusResponse(status=task["status"], position=position, segments=segments, error=error)
 
 
 # ---------------------------------------------------------------------------
@@ -161,9 +177,7 @@ async def transcribe_openai(
         shutil.copyfileobj(file.file, tmp)
         tmp_path = tmp.name
     try:
-        result = await asyncio.to_thread(
-            process_audio_without_diarization, tmp_path, "transcribe", language
-        )
+        result = await asyncio.to_thread(process_audio_without_diarization, tmp_path, "transcribe", language)
         return Transcription(text=result["text"])
     except Exception as exc:
         raise HTTPException(status_code=500, detail=str(exc)) from exc
@@ -185,9 +199,7 @@ async def translate_openai(
         shutil.copyfileobj(file.file, tmp)
         tmp_path = tmp.name
     try:
-        result = await asyncio.to_thread(
-            process_audio_without_diarization, tmp_path, "translate", None
-        )
+        result = await asyncio.to_thread(process_audio_without_diarization, tmp_path, "translate", None)
         return Transcription(text=result["text"])
     except Exception as exc:
         raise HTTPException(status_code=500, detail=str(exc)) from exc
@@ -202,21 +214,4 @@ async def translate_openai(
 
 
 if __name__ == "__main__":
-    use_mtls = os.getenv("USE_MTLS") == "1"
-    host, port = "0.0.0.0", 8000  # nosec B104
-
-    if use_mtls:
-        ssl_ctx = ssl.create_default_context(ssl.Purpose.CLIENT_AUTH)
-        ssl_ctx.load_cert_chain("/app/certs/signed_client.crt", "/app/certs/client.key")
-        ssl_ctx.load_verify_locations("/app/certs/ca.crt")
-        ssl_ctx.verify_mode = ssl.CERT_REQUIRED
-        config = uvicorn.Config(
-            app=app,
-            host=host,
-            port=port,
-            ssl_keyfile="/app/certs/client.key",
-            ssl_certfile="/app/certs/signed_client.crt",
-        )
-        uvicorn.Server(config).run()
-    else:
-        uvicorn.run(app, host=host, port=port)
+    uvicorn.run(app, host="0.0.0.0", port=8000)  # nosec B104
