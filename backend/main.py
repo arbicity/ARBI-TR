@@ -36,6 +36,16 @@ tasks: Dict[str, Dict] = {}
 tasks_queue: List[str] = []
 queue_lock = asyncio.Lock()
 
+# Serialize ALL GPU work (async queue worker + synchronous endpoints) so a single
+# GPU is never asked to run two transcription/diarization jobs at once.
+_gpu_sema = asyncio.Semaphore(1)
+
+
+async def _run_gpu(fn, *args):
+    """Run a (blocking) GPU pipeline function in a thread, one job at a time."""
+    async with _gpu_sema:
+        return await asyncio.to_thread(fn, *args)
+
 
 async def _run_task(task_id: str, background_tasks: BackgroundTasks) -> None:
     """Process the next queued task, then kick off the one after it."""
@@ -48,7 +58,7 @@ async def _run_task(task_id: str, background_tasks: BackgroundTasks) -> None:
     logger.info(f"Processing task {task_id}: {file_path}")
 
     try:
-        result = await asyncio.to_thread(
+        result = await _run_gpu(
             process_audio,
             file_path,
             task_details["task_str"],
@@ -160,10 +170,55 @@ async def get_task_status(session_id: str) -> TaskStatusResponse:
 
 
 class Transcription(BaseModel):
+    """OpenAI `response_format=json` transcription response."""
+
     text: str
 
 
-@app.post("/v1/audio/transcriptions", response_model=Transcription)
+class TranscriptionSegment(BaseModel):
+    """A segment in an OpenAI `verbose_json` response. `speaker` is an ARBI-TR
+    extension, populated only for diarization models."""
+
+    id: int
+    start: float
+    end: float
+    text: str
+    speaker: Optional[str] = None
+
+
+class VerboseTranscription(BaseModel):
+    """OpenAI `response_format=verbose_json` transcription response.
+
+    `duration` and `segments` are required (and absent from the plain
+    `Transcription` shape) so the two response models are unambiguous to
+    generated/typed clients parsing the union.
+    """
+
+    text: str
+    duration: float
+    segments: List[TranscriptionSegment]
+    task: str = "transcribe"
+    language: Optional[str] = None
+
+
+def _hms_to_seconds(hms: str) -> float:
+    """Parse a 'H:MM:SS' timestamp (from convert_time) into float seconds."""
+    try:
+        parts = hms.split(".")[0].split(":")
+        h, m, s = ([0, 0, 0] + [int(p) for p in parts])[-3:]
+        return float(h * 3600 + m * 60 + s)
+    except Exception:
+        return 0.0
+
+
+def _save_upload(file: UploadFile) -> str:
+    suffix = os.path.splitext(file.filename or "audio")[1] or ".tmp"
+    with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as tmp:
+        shutil.copyfileobj(file.file, tmp)
+        return tmp.name
+
+
+@app.post("/v1/audio/transcriptions")
 async def transcribe_openai(
     file: UploadFile = File(...),
     model: str = Form(...),
@@ -171,14 +226,43 @@ async def transcribe_openai(
     prompt: Optional[str] = Form(None),
     response_format: Optional[str] = Form("json"),
     temperature: Optional[float] = Form(0.0),
-) -> Transcription:
-    suffix = os.path.splitext(file.filename or "audio")[1] or ".tmp"
-    with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as tmp:
-        shutil.copyfileobj(file.file, tmp)
-        tmp_path = tmp.name
+) -> VerboseTranscription | Transcription:
+    """OpenAI-compatible, synchronous transcription.
+
+    Plain transcription by default. When `model` selects a diarization variant
+    (name contains "diarize"), runs the full speaker-diarization pipeline
+    synchronously and — with `response_format=verbose_json` — returns
+    per-segment speaker labels. Routable/billable through an OpenAI gateway
+    (e.g. LiteLLM); the diarization tier is chosen by model name since gateways
+    drop non-standard params.
+    """
+    diarize = "diarize" in model.lower()
+    tmp_path = _save_upload(file)
     try:
-        result = await asyncio.to_thread(process_audio_without_diarization, tmp_path, "transcribe", language)
-        return Transcription(text=result["text"])
+        if diarize:
+            result = await _run_gpu(process_audio, tmp_path, "transcribe", language, 0)
+            raw = result.get("segments", [])
+            segments = [
+                TranscriptionSegment(
+                    id=i,
+                    start=_hms_to_seconds(s["Start"]),
+                    end=_hms_to_seconds(s["End"]),
+                    text=s["Text"],
+                    speaker=s.get("Speaker"),
+                )
+                for i, s in enumerate(raw)
+            ]
+            text = " ".join(s["Text"] for s in raw).strip()
+            if response_format == "verbose_json":
+                duration = max((seg.end for seg in segments), default=0.0)
+                return VerboseTranscription(language=language, duration=duration, text=text, segments=segments)
+            return Transcription(text=text)
+
+        result = await _run_gpu(process_audio_without_diarization, tmp_path, "transcribe", language)
+        text = result["text"]
+        if response_format == "verbose_json":
+            return VerboseTranscription(language=language, text=text, duration=0.0, segments=[])
+        return Transcription(text=text)
     except Exception as exc:
         raise HTTPException(status_code=500, detail=str(exc)) from exc
     finally:
@@ -194,12 +278,9 @@ async def translate_openai(
     response_format: Optional[str] = Form("json"),
     temperature: Optional[float] = Form(0.0),
 ) -> Transcription:
-    suffix = os.path.splitext(file.filename or "audio")[1] or ".tmp"
-    with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as tmp:
-        shutil.copyfileobj(file.file, tmp)
-        tmp_path = tmp.name
+    tmp_path = _save_upload(file)
     try:
-        result = await asyncio.to_thread(process_audio_without_diarization, tmp_path, "translate", None)
+        result = await _run_gpu(process_audio_without_diarization, tmp_path, "translate", None)
         return Transcription(text=result["text"])
     except Exception as exc:
         raise HTTPException(status_code=500, detail=str(exc)) from exc

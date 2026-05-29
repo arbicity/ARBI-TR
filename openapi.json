@@ -103,6 +103,7 @@
     "/v1/audio/transcriptions": {
       "post": {
         "summary": "Transcribe Openai",
+        "description": "OpenAI-compatible, synchronous transcription.\n\nPlain transcription by default. When `model` selects a diarization variant\n(name contains \"diarize\"), runs the full speaker-diarization pipeline\nsynchronously and \u2014 with `response_format=verbose_json` \u2014 returns\nper-segment speaker labels. Routable/billable through an OpenAI gateway\n(e.g. LiteLLM); the diarization tier is chosen by model name since gateways\ndrop non-standard params.",
         "operationId": "transcribe_openai_v1_audio_transcriptions_post",
         "requestBody": {
           "content": {
@@ -120,7 +121,15 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/Transcription"
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/VerboseTranscription"
+                    },
+                    {
+                      "$ref": "#/components/schemas/Transcription"
+                    }
+                  ],
+                  "title": "Response Transcribe Openai V1 Audio Transcriptions Post"
                 }
               }
             }
@@ -488,7 +497,48 @@
         "required": [
           "text"
         ],
-        "title": "Transcription"
+        "title": "Transcription",
+        "description": "OpenAI `response_format=json` transcription response."
+      },
+      "TranscriptionSegment": {
+        "properties": {
+          "id": {
+            "type": "integer",
+            "title": "Id"
+          },
+          "start": {
+            "type": "number",
+            "title": "Start"
+          },
+          "end": {
+            "type": "number",
+            "title": "End"
+          },
+          "text": {
+            "type": "string",
+            "title": "Text"
+          },
+          "speaker": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Speaker"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "start",
+          "end",
+          "text"
+        ],
+        "title": "TranscriptionSegment",
+        "description": "A segment in an OpenAI `verbose_json` response. `speaker` is an ARBI-TR\nextension, populated only for diarization models."
       },
       "ValidationError": {
         "properties": {
@@ -529,6 +579,49 @@
           "type"
         ],
         "title": "ValidationError"
+      },
+      "VerboseTranscription": {
+        "properties": {
+          "text": {
+            "type": "string",
+            "title": "Text"
+          },
+          "duration": {
+            "type": "number",
+            "title": "Duration"
+          },
+          "segments": {
+            "items": {
+              "$ref": "#/components/schemas/TranscriptionSegment"
+            },
+            "type": "array",
+            "title": "Segments"
+          },
+          "task": {
+            "type": "string",
+            "title": "Task",
+            "default": "transcribe"
+          },
+          "language": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Language"
+          }
+        },
+        "type": "object",
+        "required": [
+          "text",
+          "duration",
+          "segments"
+        ],
+        "title": "VerboseTranscription",
+        "description": "OpenAI `response_format=verbose_json` transcription response.\n\n`duration` and `segments` are required (and absent from the plain\n`Transcription` shape) so the two response models are unambiguous to\ngenerated/typed clients parsing the union."
       }
     }
   }

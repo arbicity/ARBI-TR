@@ -33,6 +33,7 @@ from arbi_tr_client.models import (
     TaskStatusResponse,
     TranscribeSubmitResponse,
     Transcription,
+    VerboseTranscription,
 )
 from arbi_tr_client.types import File
 from tests.integration.conftest import BASE_URL, wait_for_task
@@ -107,6 +108,23 @@ def test_openai_translation(client: Client, audio_bytes: bytes):
     result = openai_translate.sync(client=client, body=body)
     assert isinstance(result, Transcription)
     assert isinstance(result.text, str)
+
+
+def test_openai_diarized_verbose(client: Client, audio_bytes: bytes):
+    """Synchronous diarization via the OpenAI endpoint: model name selects the
+    diarize tier, response_format=verbose_json returns speaker-labeled segments."""
+    body = BodyTranscribeOpenaiV1AudioTranscriptionsPost(
+        file=_audio_file(audio_bytes),
+        model="diarize-large-v3",
+        response_format="verbose_json",
+    )
+    result = openai_transcribe.sync(client=client, body=body)
+    assert isinstance(result, VerboseTranscription)
+    assert result.segments and len(result.segments) > 0
+    assert result.duration and result.duration > 0
+    assert len(result.text) > 100
+    speakers = {seg.speaker for seg in result.segments if seg.speaker}
+    assert len(speakers) == 2, f"Expected 2 speakers, got {speakers}"
 
 
 def test_openai_transcription_missing_file():
