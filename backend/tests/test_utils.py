@@ -2,9 +2,7 @@
 Unit tests for ARBI-TR utils — pure functions only, no model loading.
 """
 
-import pytest
-from utils import convert_time, merge_transcription_with_diarization, _assign_speaker
-
+from utils import _assign_speaker, convert_time, merge_transcription_with_diarization
 
 # ---------------------------------------------------------------------------
 # convert_time

@@ -17,10 +17,6 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 RUN curl -LsSf https://astral.sh/uv/install.sh | sh
 ENV PATH="/root/.local/bin:${PATH}"
 
-# Copy the certificate setup script and make it executable
-COPY setup_certs.sh /app/setup_certs.sh
-RUN chmod +x /app/setup_certs.sh
-
 # Set the working directory
 WORKDIR /app
 

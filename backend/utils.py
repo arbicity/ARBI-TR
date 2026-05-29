@@ -9,12 +9,11 @@ Pipeline:
 """
 
 import datetime
-import gc
 import os
 import subprocess
 import tempfile
 import time
-from concurrent.futures import ThreadPoolExecutor, as_completed
+from concurrent.futures import ThreadPoolExecutor
 from typing import Optional
 
 import numpy as np
@@ -85,9 +84,7 @@ def get_whisper_model():
             fw_device = "cpu"
             device_index = 0
             compute_type = "int8"
-        logger.info(
-            f"Loading faster-whisper {WHISPER_MODEL_SIZE} on {device} ({compute_type})"
-        )
+        logger.info(f"Loading faster-whisper {WHISPER_MODEL_SIZE} on {device} ({compute_type})")
         _whisper_model = WhisperModel(
             WHISPER_MODEL_SIZE,
             device=fw_device,
@@ -164,8 +161,16 @@ def convert_audio_to_wav(media_file_path: str) -> str:
     try:
         subprocess.run(  # nosec B603 B607
             [
-                "ffmpeg", "-y", "-i", media_file_path,
-                "-ar", "16000", "-ac", "1", "-c:a", "pcm_s16le",
+                "ffmpeg",
+                "-y",
+                "-i",
+                media_file_path,
+                "-ar",
+                "16000",
+                "-ac",
+                "1",
+                "-c:a",
+                "pcm_s16le",
                 wav_path,
             ],
             check=True,
@@ -205,10 +210,7 @@ def transcribe_audio(
         batch_size=WHISPER_BATCH_SIZE,
     )
     # Consume the generator
-    chunks = [
-        {"timestamp": (seg.start, seg.end), "text": seg.text}
-        for seg in segments_gen
-    ]
+    chunks = [{"timestamp": (seg.start, seg.end), "text": seg.text} for seg in segments_gen]
     logger.info(
         f"Transcribed {len(chunks)} segments in {time.perf_counter() - t0:.2f}s "
         f"(detected language: {info.language}, prob: {info.language_probability:.2f})"
@@ -240,6 +242,7 @@ def diarize_audio(
 
     # Preload audio as tensor dict — avoids torchcodec/AudioDecoder dependency
     import soundfile as sf
+
     waveform, sample_rate = sf.read(wav_path, dtype="float32")
     if waveform.ndim == 1:
         waveform = waveform[np.newaxis, :]
@@ -254,9 +257,7 @@ def diarize_audio(
         {"start": turn.start, "end": turn.end, "speaker": speaker}
         for turn, _, speaker in annotation.itertracks(yield_label=True)
     ]
-    logger.info(
-        f"Diarized {len(segments)} speaker segments in {time.perf_counter() - t0:.2f}s"
-    )
+    logger.info(f"Diarized {len(segments)} speaker segments in {time.perf_counter() - t0:.2f}s")
     return segments
 
 
@@ -371,18 +372,12 @@ def process_audio(
         # and are completely independent (both just need the WAV file).
         t0 = time.perf_counter()
         with ThreadPoolExecutor(max_workers=2) as executor:
-            future_transcribe = executor.submit(
-                transcribe_audio, wav_path, task, source_language
-            )
-            future_diarize = executor.submit(
-                diarize_audio, wav_path, num_speakers
-            )
+            future_transcribe = executor.submit(transcribe_audio, wav_path, task, source_language)
+            future_diarize = executor.submit(diarize_audio, wav_path, num_speakers)
             chunks = future_transcribe.result()
             diar_segs = future_diarize.result()
 
-        logger.info(
-            f"Parallel transcribe+diarize completed in {time.perf_counter() - t0:.2f}s"
-        )
+        logger.info(f"Parallel transcribe+diarize completed in {time.perf_counter() - t0:.2f}s")
 
         if not chunks:
             return {"segments": []}
