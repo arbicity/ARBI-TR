@@ -1,0 +1,59 @@
+name: Publish client to PyPI
+
+# Regenerates the arbi-tr client and publishes it to PyPI.
+# Triggered on version tags (created by `cz bump` / scripts/release.sh) or
+# manually. The client version is CLIENT_VERSION (bumped from the API diff by
+# scripts/generate-client.sh); if that version is already on PyPI the publish
+# is skipped, so re-tagging without API changes is a no-op.
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+concurrency:
+  group: publish-client
+  cancel-in-progress: false   # let an in-flight publish finish
+
+jobs:
+  publish:
+    name: Build & publish arbi-tr
+    runs-on: [self-hosted, ci]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 2   # base commit for the openapi.json diff
+      - uses: astral-sh/setup-uv@v5
+
+      - name: Sync backend env (provides openapi-python-client)
+        run: uv sync --project backend --extra dev
+
+      - name: Generate client from source
+        env:
+          SKIP_VERSION_BUMP: "1"   # version is owned by CLIENT_VERSION, not this run
+          SKIP_INSTALL: "1"
+        run: bash scripts/generate-client.sh
+
+      - name: Include changelog in the package
+        run: cp CHANGELOG.md client/CHANGELOG.md 2>/dev/null || true
+
+      - name: Build wheel + sdist
+        run: cd client && uv build
+
+      - name: Skip if version already on PyPI
+        id: check
+        run: |
+          VERSION=$(tr -d '[:space:]' < CLIENT_VERSION)
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          if curl -fsSL "https://pypi.org/pypi/arbi-tr/${VERSION}/json" >/dev/null 2>&1; then
+            echo "exists=true" >> "$GITHUB_OUTPUT"
+            echo "arbi-tr==${VERSION} already on PyPI — skipping publish"
+          else
+            echo "exists=false" >> "$GITHUB_OUTPUT"
+            echo "arbi-tr==${VERSION} not on PyPI — will publish"
+          fi
+
+      - name: Publish to PyPI
+        if: steps.check.outputs.exists != 'true'
+        env:
+          UV_PUBLISH_TOKEN: ${{ secrets.PYPI_API_TOKEN }}
+        run: cd client && uv publish
