@@ -21,6 +21,19 @@ def mock_models():
         yield
 
 
+@pytest.fixture(autouse=True)
+def reset_sync_state():
+    """Clear the module-level result cache / in-flight map / back-pressure counter
+    between tests, so a cached transcript from one test can't leak into another
+    (e.g. the error-propagation test reuses the same audio+params key)."""
+    import main as m
+
+    m._result_cache.clear()
+    m._inflight.clear()
+    m._pending = 0
+    yield
+
+
 @pytest.fixture()
 def client():
     from main import app
@@ -205,3 +218,48 @@ def test_openai_translation(client):
     call_args = mock_fn.call_args[0]
     assert call_args[1] == "translate"
     assert call_args[2] is None
+
+
+# ---------------------------------------------------------------------------
+# Sync-endpoint hardening: result cache + back-pressure
+# ---------------------------------------------------------------------------
+
+
+def test_identical_request_is_cached(client):
+    """A second identical request returns the cached transcript without re-running
+    the GPU — so a proxy/client timeout+retry is cheap (and single-billed)."""
+    with patch("main.process_audio_without_diarization", return_value=MOCK_TEXT) as mock_fn:
+        for _ in range(2):
+            resp = client.post(
+                "/v1/audio/transcriptions",
+                data={"model": "whisper-large-v3"},
+                files={"file": ("test.wav", io.BytesIO(FAKE_AUDIO), "audio/wav")},
+            )
+            assert resp.status_code == 200
+            assert resp.json()["text"] == "Hello world"
+    assert mock_fn.call_count == 1  # GPU ran once, second call hit the cache
+
+
+def test_health_reports_backpressure_fields(client):
+    body = client.get("/health").json()
+    assert body["inflight"] == 0
+    assert body["max_inflight"] >= 1
+
+
+def test_backpressure_returns_503_when_full(client):
+    """When the in-flight ceiling is already reached, new work is rejected with
+    503 + Retry-After instead of piling up held connections."""
+    import main as m
+
+    m._pending = m._MAX_INFLIGHT  # simulate a full queue
+    try:
+        with patch("main.process_audio_without_diarization", return_value=MOCK_TEXT):
+            resp = client.post(
+                "/v1/audio/transcriptions",
+                data={"model": "whisper-large-v3"},
+                files={"file": ("busy.wav", io.BytesIO(b"distinct-bytes-xyz"), "audio/wav")},
+            )
+        assert resp.status_code == 503
+        assert resp.headers.get("Retry-After") == "30"
+    finally:
+        m._pending = 0
