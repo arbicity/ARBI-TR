@@ -11,7 +11,11 @@ version_files = [
     "pyproject.toml:version",
     "backend/pyproject.toml:version",
     "frontend/pyproject.toml:version",
+    "CLIENT_VERSION",
 ]
 tag_format = "v$version"
 update_changelog_on_bump = true
+changelog_incremental = true
 changelog_file = "CHANGELOG.md"
+annotated_tag = true
+major_version_zero = false

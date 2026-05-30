@@ -2,12 +2,9 @@
 Unit tests for transcribe_tools — pure logic only, no Streamlit or network calls.
 """
 
-import os
-import types
 from unittest.mock import MagicMock, patch
 
 import pytest
-
 from transcribe_tools import (
     handle_response,
     load_languages,
@@ -15,7 +12,6 @@ from transcribe_tools import (
     process_file,
     secure_request,
 )
-
 
 # ---------------------------------------------------------------------------
 # load_languages
@@ -89,7 +85,7 @@ def test_secure_request_get(mock_get):
 @patch("transcribe_tools.requests.post")
 def test_secure_request_post(mock_post):
     mock_post.return_value = _mock_response(200, {"session_id": "x"})
-    resp = secure_request("post", "http://localhost:8000/transcribe/")
+    secure_request("post", "http://localhost:8000/transcribe/")
     mock_post.assert_called_once()
 
 
@@ -108,8 +104,12 @@ def test_secure_request_unsupported_method(mock_requests):
 def test_process_file_success(mock_req):
     mock_req.return_value = _mock_response(200, {"session_id": "sess-1"})
     result = process_file(
-        b"fake-audio-data", "test.wav",
-        "large", "transcribe", "*Autodetect", "*Autodetect",
+        b"fake-audio-data",
+        "test.wav",
+        "large",
+        "transcribe",
+        "*Autodetect",
+        "*Autodetect",
     )
     assert result["session_id"] == "sess-1"
     # Verify autodetect values are converted correctly
@@ -122,9 +122,13 @@ def test_process_file_success(mock_req):
 @patch("transcribe_tools.secure_request")
 def test_process_file_with_language(mock_req):
     mock_req.return_value = _mock_response(200, {"session_id": "sess-2"})
-    result = process_file(
-        b"fake-audio-data", "test.wav",
-        "small", "translate", "french", "3",
+    process_file(
+        b"fake-audio-data",
+        "test.wav",
+        "small",
+        "translate",
+        "french",
+        "3",
     )
     call_kwargs = mock_req.call_args
     data = call_kwargs.kwargs.get("data") or call_kwargs[1].get("data")
@@ -147,9 +151,7 @@ def test_poll_status_completed(mock_time, mock_req):
         200,
         {
             "status": "completed",
-            "segments": [
-                {"Start": "0:00:00", "End": "0:00:05", "Speaker": "SPEAKER_00", "Text": "Hello"}
-            ],
+            "segments": [{"Start": "0:00:00", "End": "0:00:05", "Speaker": "SPEAKER_00", "Text": "Hello"}],
         },
     )
     results = list(poll_status("sess-1", "test.wav"))
@@ -161,9 +163,7 @@ def test_poll_status_completed(mock_time, mock_req):
 @patch("transcribe_tools.time")
 def test_poll_status_failed(mock_time, mock_req):
     mock_time.sleep = MagicMock()
-    mock_req.return_value = _mock_response(
-        200, {"status": "failed", "error": "CUDA OOM"}
-    )
+    mock_req.return_value = _mock_response(200, {"status": "failed", "error": "CUDA OOM"})
     results = list(poll_status("sess-1", "test.wav"))
     assert any("failed" in str(r).lower() or "CUDA OOM" in str(r) for r in results)
 
@@ -177,9 +177,7 @@ def test_poll_status_queued_then_completed(mock_time, mock_req):
         200,
         {
             "status": "completed",
-            "segments": [
-                {"Start": "0:00:00", "End": "0:00:03", "Speaker": "SPEAKER_00", "Text": "Hi"}
-            ],
+            "segments": [{"Start": "0:00:00", "End": "0:00:03", "Speaker": "SPEAKER_00", "Text": "Hi"}],
         },
     )
     mock_req.side_effect = [queued_resp, completed_resp]

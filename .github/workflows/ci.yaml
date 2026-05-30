@@ -1,0 +1,120 @@
+name: CI Pipeline
+
+# Lint -> generate the OpenAPI client -> bring the service up -> run unit +
+# integration tests THROUGH the generated client -> build & push the image.
+# Publishing the client to PyPI is the deferred "end step" and is intentionally
+# not part of this pipeline yet.
+# Manual-dispatch only for now: the integration job needs a GPU runner, which
+# isn't wired up yet. Run the pipeline locally with scripts/run-ci-local.sh.
+# TODO: re-enable push/PR triggers once a GPU-labeled CI runner is available.
+on:
+  workflow_dispatch:
+    inputs:
+      push_image:
+        description: "Build and push the Docker image"
+        type: boolean
+        default: false
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  IMAGE_NAME: arbi-tr-api-service
+  COMPOSE_FILE: docker-compose.test.yaml
+
+jobs:
+  # ── 1. Lint / format / config checks ───────────────────────────────────────
+  code_quality:
+    name: Code quality
+    runs-on: [self-hosted, ci]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+      - name: Sync backend env (with dev tooling)
+        run: uv sync --project backend --extra dev
+      - name: Lock is up to date
+        run: uv lock --project backend --check
+      - name: Pre-commit (black / isort / flake8)
+        run: uvx pre-commit run --all-files --show-diff-on-failure
+
+  # ── 2. Tests: unit (mocked) + integration THROUGH the generated client ──────
+  test:
+    name: Tests
+    runs-on: [self-hosted, ci]   # GPU box — integration tests load real models
+    needs: code_quality
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+      - run: uv sync --project backend --extra dev
+
+      - name: Start ARBI-TR (docker compose)
+        env:
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+        run: docker compose -f "$COMPOSE_FILE" up --build -d
+
+      - name: Wait for /health
+        run: |
+          for i in $(seq 1 60); do
+            if curl -sf http://localhost:8000/health >/dev/null; then
+              echo "✅ server healthy"; exit 0
+            fi
+            sleep 5
+          done
+          echo "::error::server did not become healthy"; exit 1
+
+      - name: Unit tests (mocked, no GPU)
+        run: uv run --project backend pytest backend/tests/test_api.py backend/tests/test_utils.py -v
+
+      - name: Generate + install the client
+        run: bash scripts/generate-client.sh
+
+      - name: Integration tests (through the generated client)
+        env:
+          ARBI_TR_URL: http://localhost:8000
+        run: uv run --project backend pytest backend/tests/integration -v -m integration
+
+      - name: Logs on failure
+        if: failure()
+        run: docker compose -f "$COMPOSE_FILE" logs --tail=200
+
+      - name: Teardown
+        if: always()
+        run: docker compose -f "$COMPOSE_FILE" down --volumes --remove-orphans
+
+  # ── 3. Build & push the image (only when explicitly requested) ──────────────
+  build_and_push_image:
+    name: Build & push image
+    runs-on: [self-hosted, ci]
+    needs: [code_quality, test]
+    if: ${{ inputs.push_image }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Compute image tag (YYYY-MM-DD_<sha7>)
+        run: |
+          COMMIT_DATE=$(git show -s --format=%cd --date=format:'%Y-%m-%d' HEAD)
+          echo "DATE_SHA_TAG=${COMMIT_DATE}_$(echo "$GITHUB_SHA" | cut -c1-7)" >> "$GITHUB_ENV"
+      - uses: docker/setup-buildx-action@v3
+      - name: Login to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+      - name: Login to internal registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ secrets.REGISTRY_URL }}
+          username: ${{ secrets.REGISTRY_USERNAME }}
+          password: ${{ secrets.REGISTRY_PASSWORD }}
+      - name: Build and push
+        uses: docker/build-push-action@v5
+        with:
+          context: ./backend
+          push: true
+          tags: |
+            ${{ secrets.DOCKERHUB_USERNAME }}/${{ env.IMAGE_NAME }}:latest
+            ${{ secrets.DOCKERHUB_USERNAME }}/${{ env.IMAGE_NAME }}:${{ env.DATE_SHA_TAG }}
+            ${{ secrets.REGISTRY_URL }}/${{ env.IMAGE_NAME }}:latest
+            ${{ secrets.REGISTRY_URL }}/${{ env.IMAGE_NAME }}:${{ env.DATE_SHA_TAG }}
+          cache-from: type=registry,ref=${{ secrets.REGISTRY_URL }}/${{ env.IMAGE_NAME }}:buildcache
+          cache-to: type=registry,ref=${{ secrets.REGISTRY_URL }}/${{ env.IMAGE_NAME }}:buildcache,mode=max

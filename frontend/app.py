@@ -1,12 +1,13 @@
 import streamlit as st
 from transcribe_ui import transcribe_tab
 
+
 def main():
     # Streamlit UI setup
     st.set_page_config(
         page_title="ARBI Assistant",
         page_icon="🤖",  # Ensure the icon renders or use a URL for an image
-        layout="centered"
+        layout="centered",
     )
 
     # Define the tabs
@@ -17,6 +18,7 @@ def main():
 
     with tab2:
         st.write("Other features or tabs can be added here.")
+
 
 # Ensure the app runs when directly invoked
 if __name__ == "__main__":

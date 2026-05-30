@@ -1,0 +1,639 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "ARBI-TR",
+    "version": "1.0.0"
+  },
+  "paths": {
+    "/health": {
+      "get": {
+        "summary": "Health",
+        "operationId": "health_health_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HealthResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/transcribe/": {
+      "post": {
+        "summary": "Transcribe Audio Endpoint",
+        "operationId": "transcribe_audio_endpoint_transcribe__post",
+        "requestBody": {
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "$ref": "#/components/schemas/Body_transcribe_audio_endpoint_transcribe__post"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TranscribeSubmitResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/task_status/{session_id}": {
+      "get": {
+        "summary": "Get Task Status",
+        "operationId": "get_task_status_task_status__session_id__get",
+        "parameters": [
+          {
+            "name": "session_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Session Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TaskStatusResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/audio/transcriptions": {
+      "post": {
+        "summary": "Transcribe Openai",
+        "description": "OpenAI-compatible, synchronous transcription.\n\nPlain transcription by default. When `model` selects a diarization variant\n(name contains \"diarize\"), runs the full speaker-diarization pipeline\nsynchronously and \u2014 with `response_format=verbose_json` \u2014 returns\nper-segment speaker labels. Routable/billable through an OpenAI gateway\n(e.g. LiteLLM); the diarization tier is chosen by model name since gateways\ndrop non-standard params.",
+        "operationId": "transcribe_openai_v1_audio_transcriptions_post",
+        "requestBody": {
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "$ref": "#/components/schemas/Body_transcribe_openai_v1_audio_transcriptions_post"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/VerboseTranscription"
+                    },
+                    {
+                      "$ref": "#/components/schemas/Transcription"
+                    }
+                  ],
+                  "title": "Response Transcribe Openai V1 Audio Transcriptions Post"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/audio/translations": {
+      "post": {
+        "summary": "Translate Openai",
+        "operationId": "translate_openai_v1_audio_translations_post",
+        "requestBody": {
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "$ref": "#/components/schemas/Body_translate_openai_v1_audio_translations_post"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Transcription"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "Body_transcribe_audio_endpoint_transcribe__post": {
+        "properties": {
+          "file": {
+            "type": "string",
+            "title": "File",
+            "format": "binary"
+          },
+          "size_of_model": {
+            "type": "string",
+            "title": "Size Of Model"
+          },
+          "task_str": {
+            "type": "string",
+            "title": "Task Str"
+          },
+          "source_language": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Language"
+          },
+          "speaker_number": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Speaker Number",
+            "default": 0
+          }
+        },
+        "type": "object",
+        "required": [
+          "file",
+          "size_of_model",
+          "task_str"
+        ],
+        "title": "Body_transcribe_audio_endpoint_transcribe__post"
+      },
+      "Body_transcribe_openai_v1_audio_transcriptions_post": {
+        "properties": {
+          "file": {
+            "type": "string",
+            "title": "File",
+            "format": "binary"
+          },
+          "model": {
+            "type": "string",
+            "title": "Model"
+          },
+          "language": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Language"
+          },
+          "prompt": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Prompt"
+          },
+          "response_format": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Response Format",
+            "default": "json"
+          },
+          "temperature": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Temperature",
+            "default": 0.0
+          }
+        },
+        "type": "object",
+        "required": [
+          "file",
+          "model"
+        ],
+        "title": "Body_transcribe_openai_v1_audio_transcriptions_post"
+      },
+      "Body_translate_openai_v1_audio_translations_post": {
+        "properties": {
+          "file": {
+            "type": "string",
+            "title": "File",
+            "format": "binary"
+          },
+          "model": {
+            "type": "string",
+            "title": "Model"
+          },
+          "prompt": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Prompt"
+          },
+          "response_format": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Response Format",
+            "default": "json"
+          },
+          "temperature": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Temperature",
+            "default": 0.0
+          }
+        },
+        "type": "object",
+        "required": [
+          "file",
+          "model"
+        ],
+        "title": "Body_translate_openai_v1_audio_translations_post"
+      },
+      "HTTPValidationError": {
+        "properties": {
+          "detail": {
+            "items": {
+              "$ref": "#/components/schemas/ValidationError"
+            },
+            "type": "array",
+            "title": "Detail"
+          }
+        },
+        "type": "object",
+        "title": "HTTPValidationError"
+      },
+      "HealthResponse": {
+        "properties": {
+          "status": {
+            "type": "string",
+            "title": "Status"
+          },
+          "queue_length": {
+            "type": "integer",
+            "title": "Queue Length"
+          }
+        },
+        "type": "object",
+        "required": [
+          "status",
+          "queue_length"
+        ],
+        "title": "HealthResponse"
+      },
+      "Segment": {
+        "properties": {
+          "Start": {
+            "type": "string",
+            "title": "Start"
+          },
+          "End": {
+            "type": "string",
+            "title": "End"
+          },
+          "Speaker": {
+            "type": "string",
+            "title": "Speaker"
+          },
+          "Text": {
+            "type": "string",
+            "title": "Text"
+          }
+        },
+        "type": "object",
+        "required": [
+          "Start",
+          "End",
+          "Speaker",
+          "Text"
+        ],
+        "title": "Segment",
+        "description": "A diarized, transcribed span. Timestamps are HH:MM:SS strings."
+      },
+      "TaskStatusResponse": {
+        "properties": {
+          "status": {
+            "type": "string",
+            "title": "Status"
+          },
+          "position": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Position"
+          },
+          "segments": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/Segment"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Segments"
+          },
+          "error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error"
+          }
+        },
+        "type": "object",
+        "required": [
+          "status"
+        ],
+        "title": "TaskStatusResponse"
+      },
+      "TranscribeSubmitResponse": {
+        "properties": {
+          "session_id": {
+            "type": "string",
+            "title": "Session Id"
+          },
+          "message": {
+            "type": "string",
+            "title": "Message"
+          },
+          "queue_position": {
+            "type": "integer",
+            "title": "Queue Position"
+          }
+        },
+        "type": "object",
+        "required": [
+          "session_id",
+          "message",
+          "queue_position"
+        ],
+        "title": "TranscribeSubmitResponse"
+      },
+      "Transcription": {
+        "properties": {
+          "text": {
+            "type": "string",
+            "title": "Text"
+          },
+          "duration": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Duration"
+          }
+        },
+        "type": "object",
+        "required": [
+          "text"
+        ],
+        "title": "Transcription",
+        "description": "OpenAI `response_format=json` transcription response. `duration` (audio\nseconds) is an ARBI-TR extension so gateways can bill by audio length."
+      },
+      "TranscriptionSegment": {
+        "properties": {
+          "id": {
+            "type": "integer",
+            "title": "Id"
+          },
+          "start": {
+            "type": "number",
+            "title": "Start"
+          },
+          "end": {
+            "type": "number",
+            "title": "End"
+          },
+          "text": {
+            "type": "string",
+            "title": "Text"
+          },
+          "speaker": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Speaker"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "start",
+          "end",
+          "text"
+        ],
+        "title": "TranscriptionSegment",
+        "description": "A segment in an OpenAI `verbose_json` response. `speaker` is an ARBI-TR\nextension, populated only for diarization models."
+      },
+      "ValidationError": {
+        "properties": {
+          "loc": {
+            "items": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "integer"
+                }
+              ]
+            },
+            "type": "array",
+            "title": "Location"
+          },
+          "msg": {
+            "type": "string",
+            "title": "Message"
+          },
+          "type": {
+            "type": "string",
+            "title": "Error Type"
+          },
+          "input": {
+            "title": "Input"
+          },
+          "ctx": {
+            "type": "object",
+            "title": "Context"
+          }
+        },
+        "type": "object",
+        "required": [
+          "loc",
+          "msg",
+          "type"
+        ],
+        "title": "ValidationError"
+      },
+      "VerboseTranscription": {
+        "properties": {
+          "text": {
+            "type": "string",
+            "title": "Text"
+          },
+          "duration": {
+            "type": "number",
+            "title": "Duration"
+          },
+          "segments": {
+            "items": {
+              "$ref": "#/components/schemas/TranscriptionSegment"
+            },
+            "type": "array",
+            "title": "Segments"
+          },
+          "task": {
+            "type": "string",
+            "title": "Task",
+            "default": "transcribe"
+          },
+          "language": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Language"
+          }
+        },
+        "type": "object",
+        "required": [
+          "text",
+          "duration",
+          "segments"
+        ],
+        "title": "VerboseTranscription",
+        "description": "OpenAI `response_format=verbose_json` transcription response.\n\n`duration` and `segments` are required (and absent from the plain\n`Transcription` shape) so the two response models are unambiguous to\ngenerated/typed clients parsing the union."
+      }
+    }
+  }
+}

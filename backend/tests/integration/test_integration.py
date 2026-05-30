@@ -1,91 +1,138 @@
 """
-Integration tests — require a running ARBI-TR server.
+Integration tests — drive a running ARBI-TR server entirely through the
+auto-generated `arbi_tr_client`, validating the client and the API together.
 See conftest.py for setup instructions.
 
 Uses bundled tests/fixtures/agi_clip.ogg (two-speaker real speech, ~1.6 MB).
 Override with TEST_AUDIO_FILE=/path/to/file for custom audio.
 """
 
-import time
+import io
 
 import httpx
 import pytest
+from arbi_tr_client import Client
+from arbi_tr_client.api.default import (
+    get_task_status_task_status_session_id_get as task_status,
+)
+from arbi_tr_client.api.default import health_health_get
+from arbi_tr_client.api.default import (
+    transcribe_audio_endpoint_transcribe_post as transcribe,
+)
+from arbi_tr_client.api.default import (
+    transcribe_openai_v1_audio_transcriptions_post as openai_transcribe,
+)
+from arbi_tr_client.api.default import (
+    translate_openai_v1_audio_translations_post as openai_translate,
+)
+from arbi_tr_client.models import (
+    BodyTranscribeAudioEndpointTranscribePost,
+    BodyTranscribeOpenaiV1AudioTranscriptionsPost,
+    BodyTranslateOpenaiV1AudioTranslationsPost,
+    HealthResponse,
+    TaskStatusResponse,
+    TranscribeSubmitResponse,
+    Transcription,
+    VerboseTranscription,
+)
+from arbi_tr_client.types import File
+from tests.integration.conftest import BASE_URL, wait_for_task
 
-from tests.integration.conftest import wait_for_task
+pytestmark = pytest.mark.integration
 
 
-def test_health(base_url):
-    resp = httpx.get(f"{base_url}/health", timeout=5)
-    assert resp.status_code == 200
-    body = resp.json()
-    assert body["status"] == "ok"
-    assert isinstance(body["queue_length"], int)
+def _audio_file(audio_bytes: bytes) -> File:
+    return File(payload=io.BytesIO(audio_bytes), file_name="test.ogg", mime_type="audio/ogg")
 
 
-def test_task_status_unknown_session(base_url):
-    resp = httpx.get(f"{base_url}/task_status/does-not-exist", timeout=5)
+def test_health(client: Client):
+    result = health_health_get.sync(client=client)
+    assert isinstance(result, HealthResponse)
+    assert result.status == "ok"
+    assert isinstance(result.queue_length, int)
+
+
+def test_task_status_unknown_session(client: Client):
+    resp = task_status.sync_detailed(client=client, session_id="does-not-exist")
     assert resp.status_code == 404
 
 
-def test_transcribe_with_diarization(base_url, audio_wav):
-    """Full pipeline: transcribe + diarize two-speaker audio, check schema and speakers."""
-    resp = httpx.post(
-        f"{base_url}/transcribe/",
-        data={"size_of_model": "large", "task_str": "transcribe", "speaker_number": "2"},
-        files={"file": ("test.ogg", audio_wav, "audio/ogg")},
-        timeout=30,
+def test_transcribe_with_diarization(client: Client, audio_bytes: bytes):
+    """Full pipeline: transcribe + diarize two-speaker audio; check typed schema and speakers."""
+    body = BodyTranscribeAudioEndpointTranscribePost(
+        file=_audio_file(audio_bytes),
+        size_of_model="large",
+        task_str="transcribe",
+        speaker_number=2,
     )
-    assert resp.status_code == 200
-    body = resp.json()
-    assert "session_id" in body
-    assert body["message"] == "Your request is queued for processing"
+    submitted = transcribe.sync(client=client, body=body)
+    assert isinstance(submitted, TranscribeSubmitResponse)
+    assert submitted.session_id
+    assert submitted.message == "Your request is queued for processing"
 
-    result = wait_for_task(base_url, body["session_id"])
-    assert result["status"] == "completed"
-    assert len(result["segments"]) > 0
+    result = wait_for_task(client, submitted.session_id)
+    assert isinstance(result, TaskStatusResponse)
+    assert result.status == "completed"
+    assert result.segments and len(result.segments) > 0
 
-    # Schema
-    for seg in result["segments"]:
-        assert set(seg.keys()) == {"Start", "End", "Speaker", "Text"}
-        assert seg["Speaker"].startswith("SPEAKER_")
+    # Typed segment schema (Segment model: Start/End/Speaker/Text).
+    for seg in result.segments:
+        assert seg.speaker.startswith("SPEAKER_")
+        assert seg.start and seg.end
 
-    # Two-speaker audio should produce 2 speakers
-    speakers = {s["Speaker"] for s in result["segments"]}
+    # Two-speaker audio should yield 2 distinct speakers.
+    speakers = {seg.speaker for seg in result.segments}
     assert len(speakers) == 2, f"Expected 2 speakers, got {speakers}"
 
-    # Non-trivial text
-    total_text = " ".join(s["Text"] for s in result["segments"])
+    # Non-trivial transcript.
+    total_text = " ".join(seg.text for seg in result.segments)
     assert len(total_text.strip()) > 100
 
 
-def test_openai_transcription(base_url, audio_wav):
-    resp = httpx.post(
-        f"{base_url}/v1/audio/transcriptions",
-        data={"model": "whisper-large-v3", "language": "en"},
-        files={"file": ("test.ogg", audio_wav, "audio/ogg")},
-        timeout=120,
+def test_openai_transcription(client: Client, audio_bytes: bytes):
+    body = BodyTranscribeOpenaiV1AudioTranscriptionsPost(
+        file=_audio_file(audio_bytes),
+        model="whisper-large-v3",
+        language="en",
     )
-    assert resp.status_code == 200
-    body = resp.json()
-    assert isinstance(body["text"], str)
-    assert len(body["text"]) > 100
+    result = openai_transcribe.sync(client=client, body=body)
+    assert isinstance(result, Transcription)
+    assert len(result.text) > 100
 
 
-def test_openai_transcription_missing_file(base_url):
+def test_openai_translation(client: Client, audio_bytes: bytes):
+    body = BodyTranslateOpenaiV1AudioTranslationsPost(
+        file=_audio_file(audio_bytes),
+        model="whisper-large-v3",
+    )
+    result = openai_translate.sync(client=client, body=body)
+    assert isinstance(result, Transcription)
+    assert isinstance(result.text, str)
+
+
+def test_openai_diarized_verbose(client: Client, audio_bytes: bytes):
+    """Synchronous diarization via the OpenAI endpoint: model name selects the
+    diarize tier, response_format=verbose_json returns speaker-labeled segments."""
+    body = BodyTranscribeOpenaiV1AudioTranscriptionsPost(
+        file=_audio_file(audio_bytes),
+        model="diarize-large-v3",
+        response_format="verbose_json",
+    )
+    result = openai_transcribe.sync(client=client, body=body)
+    assert isinstance(result, VerboseTranscription)
+    assert result.segments and len(result.segments) > 0
+    assert result.duration and result.duration > 0
+    assert len(result.text) > 100
+    speakers = {seg.speaker for seg in result.segments if seg.speaker}
+    assert len(speakers) == 2, f"Expected 2 speakers, got {speakers}"
+
+
+def test_openai_transcription_missing_file():
+    """Negative case: the typed client requires `file`, so post a fileless multipart
+    request directly to assert the server still returns 422."""
     resp = httpx.post(
-        f"{base_url}/v1/audio/transcriptions",
+        f"{BASE_URL}/v1/audio/transcriptions",
         data={"model": "whisper-large-v3"},
         timeout=10,
     )
     assert resp.status_code == 422
-
-
-def test_openai_translation(base_url, audio_wav):
-    resp = httpx.post(
-        f"{base_url}/v1/audio/translations",
-        data={"model": "whisper-large-v3"},
-        files={"file": ("test.ogg", audio_wav, "audio/ogg")},
-        timeout=120,
-    )
-    assert resp.status_code == 200
-    assert isinstance(resp.json()["text"], str)

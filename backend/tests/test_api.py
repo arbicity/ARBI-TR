@@ -24,17 +24,14 @@ def mock_models():
 @pytest.fixture()
 def client():
     from main import app
+
     with TestClient(app, raise_server_exceptions=True) as c:
         yield c
 
 
 FAKE_AUDIO = b"RIFF\x00\x00\x00\x00WAVEfmt "  # minimal fake WAV header
 
-MOCK_SEGMENTS = {
-    "segments": [
-        {"Start": "0:00:01", "End": "0:00:05", "Speaker": "SPEAKER_00", "Text": "Hello world"}
-    ]
-}
+MOCK_SEGMENTS = {"segments": [{"Start": "0:00:01", "End": "0:00:05", "Speaker": "SPEAKER_00", "Text": "Hello world"}]}
 
 MOCK_TEXT = {"text": "Hello world"}
 
@@ -146,9 +143,7 @@ def test_task_status_failed_has_error(client):
 
 
 def test_openai_transcription(client):
-    with patch(
-        "main.process_audio_without_diarization", return_value=MOCK_TEXT
-    ):
+    with patch("main.process_audio_without_diarization", return_value=MOCK_TEXT):
         resp = client.post(
             "/v1/audio/transcriptions",
             data={"model": "whisper-large-v3"},
@@ -159,9 +154,7 @@ def test_openai_transcription(client):
 
 
 def test_openai_transcription_with_language(client):
-    with patch(
-        "main.process_audio_without_diarization", return_value=MOCK_TEXT
-    ) as mock_fn:
+    with patch("main.process_audio_without_diarization", return_value=MOCK_TEXT) as mock_fn:
         client.post(
             "/v1/audio/transcriptions",
             data={"model": "whisper-large-v3", "language": "fr"},
@@ -200,9 +193,7 @@ def test_openai_transcription_error_propagates(client):
 
 
 def test_openai_translation(client):
-    with patch(
-        "main.process_audio_without_diarization", return_value=MOCK_TEXT
-    ) as mock_fn:
+    with patch("main.process_audio_without_diarization", return_value=MOCK_TEXT) as mock_fn:
         resp = client.post(
             "/v1/audio/translations",
             data={"model": "whisper-large-v3"},

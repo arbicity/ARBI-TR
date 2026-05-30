@@ -143,14 +143,12 @@ Set these in your `.env` file:
 | `ENABLE_TF32` | Enable TF32 matmul on Ampere+ GPUs | `1` |
 | `WHISPER_DEVICE` | GPU for whisper (e.g. `cuda:0`, `cpu`) | auto |
 | `DIARIZE_DEVICE` | GPU for pyannote (e.g. `cuda:1`, `cpu`) | auto |
-| `USE_MTLS` | Enable mutual TLS between containers | `0` |
 
 ### Docker Compose variants
 
 | File | What it runs |
 |------|-------------|
 | `docker-compose.yaml` | API server + web UI (default) |
-| `docker-compose.tls.yaml` | API server + web UI with mutual TLS |
 | `docker-compose.test.yaml` | API server only (for testing / API-only deployments) |
 
 ## Development
