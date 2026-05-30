@@ -170,9 +170,11 @@ async def get_task_status(session_id: str) -> TaskStatusResponse:
 
 
 class Transcription(BaseModel):
-    """OpenAI `response_format=json` transcription response."""
+    """OpenAI `response_format=json` transcription response. `duration` (audio
+    seconds) is an ARBI-TR extension so gateways can bill by audio length."""
 
     text: str
+    duration: Optional[float] = None
 
 
 class TranscriptionSegment(BaseModel):
@@ -253,16 +255,17 @@ async def transcribe_openai(
                 for i, s in enumerate(raw)
             ]
             text = " ".join(s["Text"] for s in raw).strip()
+            duration = max((seg.end for seg in segments), default=0.0)
             if response_format == "verbose_json":
-                duration = max((seg.end for seg in segments), default=0.0)
                 return VerboseTranscription(language=language, duration=duration, text=text, segments=segments)
-            return Transcription(text=text)
+            return Transcription(text=text, duration=duration)
 
         result = await _run_gpu(process_audio_without_diarization, tmp_path, "transcribe", language)
         text = result["text"]
+        duration = float(result.get("duration") or 0.0)
         if response_format == "verbose_json":
-            return VerboseTranscription(language=language, text=text, duration=0.0, segments=[])
-        return Transcription(text=text)
+            return VerboseTranscription(language=language, text=text, duration=duration, segments=[])
+        return Transcription(text=text, duration=duration)
     except Exception as exc:
         raise HTTPException(status_code=500, detail=str(exc)) from exc
     finally:
@@ -281,7 +284,7 @@ async def translate_openai(
     tmp_path = _save_upload(file)
     try:
         result = await _run_gpu(process_audio_without_diarization, tmp_path, "translate", None)
-        return Transcription(text=result["text"])
+        return Transcription(text=result["text"], duration=float(result.get("duration") or 0.0))
     except Exception as exc:
         raise HTTPException(status_code=500, detail=str(exc)) from exc
     finally:

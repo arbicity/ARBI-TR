@@ -392,13 +392,14 @@ def process_audio_without_diarization(
     task: str,
     source_language: Optional[str],
 ) -> dict:
-    """Transcribe only (no diarization). Returns {text: str}."""
+    """Transcribe only (no diarization). Returns {text: str, duration: float}."""
     wav_path: Optional[str] = None
     try:
         wav_path = convert_audio_to_wav(file_path)
         chunks = transcribe_audio(wav_path, task=task, language=source_language)
         text = " ".join(c["text"].strip() for c in chunks)
-        return {"text": text}
+        duration = max((c["timestamp"][1] for c in chunks if c["timestamp"][1] is not None), default=0.0)
+        return {"text": text, "duration": float(duration)}
     finally:
         if wav_path and os.path.exists(wav_path):
             os.remove(wav_path)

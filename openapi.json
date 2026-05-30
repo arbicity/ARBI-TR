@@ -491,6 +491,17 @@
           "text": {
             "type": "string",
             "title": "Text"
+          },
+          "duration": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Duration"
           }
         },
         "type": "object",
@@ -498,7 +509,7 @@
           "text"
         ],
         "title": "Transcription",
-        "description": "OpenAI `response_format=json` transcription response."
+        "description": "OpenAI `response_format=json` transcription response. `duration` (audio\nseconds) is an ARBI-TR extension so gateways can bill by audio length."
       },
       "TranscriptionSegment": {
         "properties": {
