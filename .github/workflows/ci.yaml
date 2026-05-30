@@ -4,10 +4,13 @@ name: CI Pipeline
 # integration tests THROUGH the generated client -> build & push the image.
 # Publishing the client to PyPI is the deferred "end step" and is intentionally
 # not part of this pipeline yet.
-# Manual-dispatch only for now: the integration job needs a GPU runner, which
-# isn't wired up yet. Run the pipeline locally with scripts/run-ci-local.sh.
-# TODO: re-enable push/PR triggers once a GPU-labeled CI runner is available.
+# The `test` job loads real models, so it pins to the `gpu-ci` runner (the GPU
+# box that also has the pre-cached model store at /mnt/k8scache).
 on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
   workflow_dispatch:
     inputs:
       push_image:
@@ -27,7 +30,7 @@ jobs:
   # ── 1. Lint / format / config checks ───────────────────────────────────────
   code_quality:
     name: Code quality
-    runs-on: [self-hosted, ci]
+    runs-on: [self-hosted, gpu-ci]
     steps:
       - uses: actions/checkout@v4
       - uses: astral-sh/setup-uv@v5
@@ -41,7 +44,7 @@ jobs:
   # ── 2. Tests: unit (mocked) + integration THROUGH the generated client ──────
   test:
     name: Tests
-    runs-on: [self-hosted, ci]   # GPU box — integration tests load real models
+    runs-on: [self-hosted, gpu-ci]   # GPU box — integration tests load real models
     needs: code_quality
     steps:
       - uses: actions/checkout@v4
@@ -51,6 +54,10 @@ jobs:
       - name: Start ARBI-TR (docker compose)
         env:
           HF_TOKEN: ${{ secrets.HF_TOKEN }}
+          # Reuse the GPU box's pre-cached model store instead of downloading
+          # gated models on every run; boot offline against it.
+          HF_CACHE: /mnt/k8scache
+          HF_HUB_OFFLINE: "1"
         run: docker compose -f "$COMPOSE_FILE" up --build -d
 
       - name: Wait for /health
@@ -85,7 +92,7 @@ jobs:
   # ── 3. Build & push the image (only when explicitly requested) ──────────────
   build_and_push_image:
     name: Build & push image
-    runs-on: [self-hosted, ci]
+    runs-on: [self-hosted, gpu-ci]
     needs: [code_quality, test]
     if: ${{ inputs.push_image }}
     steps:
